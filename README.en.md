@@ -2,14 +2,14 @@
 
 [한국어](README.md)
 
-When you run several Claude Code sessions at once, it's easy to lose track of which ones are still working, which ones have finished, and which ones are waiting for you.
+When you run several Claude Code or Codex sessions at once, it's easy to lose track of which ones are still working, which ones have finished, and which ones are waiting for you.
 SessionBoard shows the state of every session at a glance, in a small floating window and in the menu bar.
 
-- **Running**: Claude is working. Shows how long, and whether background tasks are still going.
+- **Running**: Claude or Codex is working. Shows how long, and whether background tasks are still going.
 - **Needs you**: it's your turn — a permission prompt, a multiple-choice question, plan approval, or a background task that has been running too long.
 - **Done**: finished. Shows the first line of the last reply and **stays until you confirm it**.
 
-It covers both Claude desktop app (Code tab) sessions and `claude` sessions started from a terminal.
+It covers Claude desktop app (Code tab) sessions, `claude` sessions started from a terminal, and Codex (app and CLI) sessions. Codex sessions are labeled **Codex**.
 
 <p align="center"><img src="docs/images/overview.webp" alt="Session states in the floating window and the menu bar" width="820"></p>
 
@@ -38,12 +38,13 @@ The Homebrew cask does this for you.
 
 ### First launch
 
-On first launch the app asks to add hooks to Claude Code's settings file (`~/.claude/settings.json`).
+On first launch the app asks to add hooks to Claude Code's settings file (`~/.claude/settings.json`), and to Codex's (`~/.codex/hooks.json`) if you use Codex.
 
 - Your existing settings and hooks are left as they are; only the missing hooks are added.
 - The original file is backed up as `settings.json.bak-session-board-<timestamp>`.
 - The app registers itself to open at login.
 - Sessions that are already running show up from their **next** prompt.
+- **Codex runs new hooks only after you trust them.** After connecting, approve the hooks when Codex asks you to review them ("Trust all and continue" in the CLI).
 
 ## Usage
 
@@ -57,7 +58,7 @@ Most of the time the window stays collapsed and only shows counts.
 |---|---|
 | Hover over the collapsed window | A compact one-line-per-session list unfolds |
 | Click the collapsed window | Opens the full window with summaries and buttons |
-| Click a session | Opens it in the Claude app (terminal sessions bring their terminal app forward) |
+| Click a session | Opens it in the Claude or Codex app (Claude sessions started in a terminal bring that terminal app forward) |
 | **확인** (Confirm) on a done session | Removes it from the list (appears on hover) |
 | **더 기다리기** (Wait longer) | Postpones the long-running background task alert by the configured time |
 | Right-click the top of the window | Confirm all done, refresh, settings, quit |
@@ -78,7 +79,7 @@ Right-click the top of the window → **설정…** (Settings).
 - **General:** open at login, show in menu bar
 - **Background tasks:** alert when they run long (on/off), threshold (5, 10, 15, 20, 30 minutes or 1 hour; default 15 minutes)
 - **Updates:** update notifications (on/off), check now
-- **Manage:** connect or disconnect Claude Code, delete SessionBoard
+- **Manage:** connect or disconnect Claude Code and Codex, delete SessionBoard
 
 ## Updates
 
@@ -91,22 +92,23 @@ You can also run `/Applications/SessionBoard.app/Contents/MacOS/SessionBoard --s
 
 ## How it works
 
-1. On every session event, Claude Code hooks run `~/.claude/session-board/bin/hook.sh`, which keeps one state file per session in `~/.claude/session-board/state/`.
-2. The app reads those files every 3 seconds. Titles come from the Claude desktop app's session data, or, for terminal sessions, from the title stored in the transcript (`/rename` or the automatic title).
-3. Background tasks are recorded when they start and removed when their completion notice appears in the transcript.
+1. On every session event, Claude Code and Codex hooks run `~/.claude/session-board/bin/hook.sh`, which keeps one state file per session in `~/.claude/session-board/state/`.
+2. The app reads those files every 3 seconds. Titles come from the Claude desktop app's session data, from the transcript title for terminal sessions (`/rename` or the automatic title), or from Codex's saved thread title.
+3. Background tasks are recorded when they start and removed when their completion notice appears in the transcript (Claude Code only).
 
 Apart from checking GitHub for updates, nothing leaves your Mac — everything is stored locally.
 
 ## Good to know
 
-- Session titles and app-session detection read files the Claude desktop app keeps internally. That format is not public, so **an app update may break it.**
-- If you interrupt a session, no "stopped" signal arrives, so it stays running; after 10 minutes without activity it is marked as quiet.
+- Session titles and app-session detection read files the Claude desktop app and Codex keep internally. That format is not public, so **an app update may break it.**
+- Background runs such as `claude -p` and `codex exec` are not listed.
+- If you interrupt a Claude session, no "stopped" signal arrives, so it stays running (Codex shows "interrupted" right away); after 10 minutes without activity it is marked as quiet.
 - If Claude ends a turn by asking a question in plain text (no choice dialog), it shows as done, not as needing you.
 - Clicking a terminal session brings the terminal app forward but can't switch to the exact tab.
 
 ## Uninstall
 
-- **In the app:** right-click the top of the window → **설정…** → **SessionBoard 삭제** (disconnects Claude Code, removes the login item and records), then move the app to the Trash.
+- **In the app:** right-click the top of the window → **설정…** → **SessionBoard 삭제** (disconnects Claude Code and Codex, removes the login item and records), then move the app to the Trash.
 - **Homebrew:** `brew uninstall --zap --cask session-board`
 
 ## Build from source

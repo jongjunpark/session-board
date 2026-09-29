@@ -1,9 +1,13 @@
 #!/bin/bash
-# Claude Code 훅 → 세션 상태 기록 (running | needs_input | done)
-# 상태 파일: ~/.claude/session-board/state/<cli session id>.json
+# Claude Code / Codex 훅 → 세션 상태 기록 (running | needs_input | done)
+# 상태 파일: ~/.claude/session-board/state/<session id>.json
+# Codex 훅은 `hook.sh --agent codex` 로 부른다 (두 도구의 입력 형식은 거의 같다)
 # 훅 결정에 끼어들지 않도록 stdout 에는 아무것도 쓰지 않고 항상 exit 0.
 set -u
 exec 1>/dev/null
+
+AGENT="claude"
+[ "${1:-}" = "--agent" ] && AGENT="${2:-claude}"
 
 BOARD="$HOME/.claude/session-board"
 DIR="$BOARD/state"
@@ -28,12 +32,14 @@ write() {
     --arg sid "$sid" --arg state "$1" --arg reason "$2" --arg summary "$3" \
     --arg cwd "$(jq -r '.cwd // ""' <<<"$input")" \
     --arg transcript "$(jq -r '.transcript_path // ""' <<<"$input")" \
-    --arg entrypoint "${CLAUDE_CODE_ENTRYPOINT:-}" \
+    --arg agent "$AGENT" \
+    --arg entrypoint "$( [ "$AGENT" = claude ] && echo "${CLAUDE_CODE_ENTRYPOINT:-}" )" \
     --arg bundle "${__CFBundleIdentifier:-}" \
     --argjson now "$(date +%s)" --argjson prev "$prev" '
     ($prev // {}) as $p
     | {
         session_id: $sid,
+        agent: $agent, # claude | codex
         state: $state,
         reason: $reason,
         summary: $summary,
@@ -71,7 +77,7 @@ add_bg() {
 
 notify_needs_input() {
   [ "$cur" = "needs_input" ] && return
-  "$BOARD/bin/notify.sh" "$sid" "$1" >/dev/null 2>&1 &
+  "$BOARD/bin/notify.sh" "$sid" "$1" "$AGENT" >/dev/null 2>&1 &
 }
 
 case "$event" in
@@ -82,6 +88,7 @@ case "$event" in
     case "$tool" in
       AskUserQuestion) notify_needs_input "질문에 답해 주세요"; write needs_input "질문에 답해 주세요" "" ;;
       ExitPlanMode)    notify_needs_input "계획을 승인해 주세요"; write needs_input "계획을 승인해 주세요" "" ;;
+      request_user_input) notify_needs_input "질문에 답해 주세요"; write needs_input "질문에 답해 주세요" "" ;; # Codex
     esac
     ;;
   PermissionRequest)
@@ -117,7 +124,7 @@ case "$event" in
     else
       write running "" ""
     fi
-    [ "$event" = "PostToolUse" ] && add_bg
+    [ "$event" = "PostToolUse" ] && [ "$AGENT" = claude ] && add_bg # 백그라운드 작업 추적은 Claude 만
     # 백그라운드 작업을 직접 멈춘 경우엔 완료 알림이 오지 않으므로 여기서 뺀다
     case "$tool" in
       TaskStop|KillShell|KillBash)
@@ -138,6 +145,9 @@ case "$event" in
     ;;
   StopFailure)
     write done "오류로 멈춤" ""
+    ;;
+  Interrupt) # Codex: 도중에 멈춤
+    write done "중단됨" ""
     ;;
 esac
 exit 0

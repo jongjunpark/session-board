@@ -74,37 +74,58 @@ for f in "$DIR"/*.json; do
     '. + [$s[0] + {mtime: $mt, path: $path, transcript_title: $title}]' <<<"$states" 2>/dev/null || echo "$states")
 done
 
-# 앱 세션이면 앱 정보, 터미널 세션이면 터미널 표시. 둘 다 아니면(claude -p 등) null
+# Codex 스레드 제목·출처·보관 여부. Codex 가 로컬 DB 에 둔다 (파일 이름의 숫자가 바뀌어도 가장 최근 것을 쓴다).
+# 읽지 못하면 비워 두고, 제목은 폴더 이름으로 대신한다.
+CIDX="{}"
+if jq -e 'any(.[]; .agent == "codex")' <<<"$states" >/dev/null 2>&1; then
+  CDB=$(ls -t "$HOME"/.codex/state_*.sqlite 2>/dev/null | head -1)
+  ids=$(jq -r '[.[] | select(.agent == "codex") | .session_id | select(test("^[0-9A-Za-z-]+$")) | "\u0027" + . + "\u0027"] | join(",")' <<<"$states")
+  if [ -n "$CDB" ] && [ -n "$ids" ]; then
+    CIDX=$(sqlite3 -readonly -json "$CDB" "SELECT id, COALESCE(NULLIF(name, ''), title, '') AS title, source, archived FROM threads WHERE id IN ($ids);" 2>/dev/null \
+      | jq -c 'map({key: .id, value: .}) | from_entries' 2>/dev/null)
+    [ -n "$CIDX" ] || CIDX="{}"
+  fi
+fi
+
+# Claude 앱 세션이면 앱 정보, 터미널 세션이면 터미널 표시, Codex 면 Codex 정보. 셋 다 아니면(claude -p 등) null
 FILTER_COMMON='
   def terminal: (.entrypoint // "") | IN("cli", "claude-vscode");
-  def source($idx): . as $s | ($idx[$s.session_id]) as $m
-    | if $m != null then {kind: "app", m: $m}
-      elif ($s | terminal) then {kind: "terminal", m: null}
-      else null end;
+  def source($idx; $cidx): . as $s
+    | if ($s.agent // "claude") == "codex" then {kind: "codex", m: $cidx[$s.session_id]}
+      else ($idx[$s.session_id]) as $m
+        | if $m != null then {kind: "app", m: $m}
+          elif ($s | terminal) then {kind: "terminal", m: null}
+          else null end
+      end;
+  # 보관한 Codex 스레드와 codex exec 처럼 뒤에서 도는 실행은 뺀다
+  def codexHidden($src): $src.kind == "codex" and ((($src.m.archived // 0) == 1) or (($src.m.source // "") == "exec"));
   def bgcount: (.bg // []) | length;
 '
 
 # 지울 것:
 #  - 앱에도 터미널에도 속하지 않는 실행(claude -p 등)은 하루 뒤
 #  - 보관·예약 루틴 앱 세션은 바로
-#  - 터미널 세션이 완료 아닌 채로 하루 넘게 소식이 없으면 (창을 닫았거나 멈춘 것)
-jq -r --slurpfile idx "$IDX" --argjson now "$(date +%s)" "$FILTER_COMMON"'
-  .[] | . as $s | ($s | source($idx[0])) as $src
+#  - 보관한 Codex 스레드, codex exec 실행은 바로
+#  - 터미널·Codex 세션이 완료 아닌 채로 하루 넘게 소식이 없으면 (창을 닫았거나 멈춘 것)
+jq -r --slurpfile idx "$IDX" --argjson cidx "$CIDX" --argjson now "$(date +%s)" "$FILTER_COMMON"'
+  .[] | . as $s | ($s | source($idx[0]; $cidx)) as $src
   | select(
       ($src == null and ($now - $s.updated_at) > 86400)
       or ($src.kind == "app" and (($src.m.archived // false) or ($src.m.scheduled // false)))
-      or ($src.kind == "terminal" and $s.state != "done" and ($now - $s.mtime) > 86400))
+      or codexHidden($src)
+      or (($src.kind == "terminal" or $src.kind == "codex") and $s.state != "done" and ($now - $s.mtime) > 86400))
   | .path' <<<"$states" | while IFS= read -r p; do rm -f "$p"; done
 
-jq -c --slurpfile idx "$IDX" --argjson now "$(date +%s)" --argjson stale "$STALE_SEC" --argjson bgwarn "$BG_WARN_SEC" --argjson bgon "$BG_WARN_ON" "$FILTER_COMMON"'
+jq -c --slurpfile idx "$IDX" --argjson cidx "$CIDX" --argjson now "$(date +%s)" --argjson stale "$STALE_SEC" --argjson bgwarn "$BG_WARN_SEC" --argjson bgon "$BG_WARN_ON" "$FILTER_COMMON"'
   # 큰 단위 하나만: 방금 · N분 · N시간 · N일
   def dur: if . < 60 then "방금" elif . < 3600 then "\(. / 60 | floor)분"
            elif . < 86400 then "\(. / 3600 | floor)시간" else "\(. / 86400 | floor)일" end;
   def rank: {needs_input: 0, running: 1, done: 2}[.state] // 3;
 
-  [ .[] | . as $s | ($s | source($idx[0])) as $src
+  [ .[] | . as $s | ($s | source($idx[0]; $cidx)) as $src
     | select($src != null)
-    | select($src.kind == "terminal" or (($src.m.archived | not) and ($src.m.scheduled | not)))
+    | select($src.kind != "app" or (($src.m.archived | not) and ($src.m.scheduled | not)))
+    | select(codexHidden($src) | not)
     | ($now - $s.started_at) as $el | ($now - $s.mtime) as $idle
     | ($s.cwd | split("/") | last) as $folder
     | ($s | bgcount) as $bgn
@@ -120,9 +141,11 @@ jq -c --slurpfile idx "$IDX" --argjson now "$(date +%s)" --argjson stale "$STALE
     | {
         session_id: $s.session_id,
         kind: $src.kind,
-        local_id: (if $src.kind == "app" then $src.m.id else "" end),
+        local_id: (if $src.kind == "app" then $src.m.id elif $src.kind == "codex" then $s.session_id else "" end),
         app_bundle: ($s.app_bundle // ""),
         title: (if $src.kind == "app" then (if ($src.m.title // "") == "" then $folder else $src.m.title end)
+                elif $src.kind == "codex" then
+                  (($src.m.title // "") | (split("\n")[0] // "") | .[0:60]) as $t | (if $t == "" then $folder else $t end)
                 elif ($s.transcript_title // "") != "" then $s.transcript_title
                 else $folder end),
         state: $state,
@@ -139,7 +162,7 @@ jq -c --slurpfile idx "$IDX" --argjson now "$(date +%s)" --argjson stale "$STALE
                 elif $state == "running" then (if $el < 60 then "방금" else ($el | dur) end)
                 else "\(($now - $s.updated_at) | dur) 전" end),
         label: (
-          (if $src.kind == "terminal" then "터미널 · \($folder) · " else "" end)
+          (if $src.kind == "terminal" then "터미널 · \($folder) · " elif $src.kind == "codex" then "Codex · " else "" end)
           + (if $s.state == "needs_input" then ($s.reason // "확인이 필요해요")
              elif $bgwarned then "\($bgname) \($bgage | dur)째 · 멈췄는지 확인해 보세요"
              elif $bgn > 0 and $s.state == "done" then "\($bgname) \($bgage | dur)째"

@@ -143,6 +143,11 @@ final class BoardModel: ObservableObject {
     }
 
     func open(_ item: BoardItem) {
+        if item.kind == "codex" {
+            // Codex 앱에서 그 스레드를 연다
+            if let url = URL(string: "codex://threads/\(item.local_id)") { NSWorkspace.shared.open(url) }
+            return
+        }
         if item.kind == "terminal" {
             // 터미널 세션은 특정 탭으로 들어갈 수 없어서, 띄운 앱(iTerm 등)을 앞으로 가져온다
             guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: item.app_bundle) else { return }

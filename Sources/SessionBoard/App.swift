@@ -253,9 +253,11 @@ enum SessionBoardMain {
                 do {
                     if args.contains("--install-hooks") {
                         try Installer.installScripts()
-                        try Installer.installHooks()
+                        try Installer.installHooks(.claude)
+                        if HookTarget.codexAvailable { try Installer.installHooks(.codex) }
                     } else {
-                        try Installer.uninstallHooks()
+                        try Installer.uninstallHooks(.claude)
+                        try Installer.uninstallHooks(.codex)
                     }
                     return true
                 } catch {

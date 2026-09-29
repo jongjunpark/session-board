@@ -6,7 +6,8 @@ struct SettingsView: View {
     @ObservedObject var updater = Updater.shared
     @ObservedObject var config = BoardConfig.shared
     @State private var launchAtLogin = Installer.launchAtLogin
-    @State private var hooksInstalled = Installer.hooksInstalled()
+    @State private var hooksInstalled = Installer.hooksInstalled(.claude)
+    @State private var codexInstalled = Installer.hooksInstalled(.codex)
     @State private var menuBarEnabled = MenuBarController.enabled
 
     var body: some View {
@@ -60,7 +61,7 @@ struct SettingsView: View {
                 }
             }
 
-            Section("관리") {
+            Section {
                 LabeledContent("Claude Code 연동") {
                     HStack(spacing: 8) {
                         Text(hooksInstalled ? "연결됨" : "연결 안 됨").foregroundStyle(.secondary)
@@ -71,8 +72,28 @@ struct SettingsView: View {
                         }
                     }
                 }
+                if HookTarget.codexAvailable {
+                    LabeledContent("Codex 연동") {
+                        HStack(spacing: 8) {
+                            Text(codexInstalled ? "연결됨" : "연결 안 됨").foregroundStyle(.secondary)
+                            if codexInstalled {
+                                Button("연결 해제") { run { try Installer.uninstallHooks(.codex) } }
+                            } else {
+                                Button("연결") { run { try Installer.installHooks(.codex) } }
+                            }
+                        }
+                    }
+                }
                 LabeledContent("SessionBoard 삭제") {
                     Button("삭제…") { Installer.uninstallEverything() }
+                }
+            } header: {
+                Text("관리")
+            } footer: {
+                if HookTarget.codexAvailable {
+                    Text("Codex 는 연결한 뒤 Codex 에서 새 훅을 한 번 허용해야 동작해요. 다음에 Codex 를 열 때 훅을 검토하라는 창이 뜨면 허용해 주세요.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -83,7 +104,8 @@ struct SettingsView: View {
 
     private func run(_ action: () throws -> Void) {
         do { try action() } catch { Installer.alert("설정을 바꾸지 못했어요", error.localizedDescription) }
-        hooksInstalled = Installer.hooksInstalled()
+        hooksInstalled = Installer.hooksInstalled(.claude)
+        codexInstalled = Installer.hooksInstalled(.codex)
     }
 }
 
