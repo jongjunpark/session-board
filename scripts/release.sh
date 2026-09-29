@@ -25,6 +25,9 @@ gh release create "$TAG" "$ZIP" --title "${APP_NAME} ${TAG}" --generate-notes
 echo "▸ Homebrew 탭 갱신 ($TAP_REPO)"
 TAP=$(mktemp -d)
 gh repo clone "$TAP_REPO" "$TAP" -- -q
+# 새로 받은 복사본에도 이 저장소와 같은 커밋 신원을 쓴다 (전역 설정의 다른 이메일이 섞이지 않게)
+git -C "$TAP" config user.name "$(git config user.name)"
+git -C "$TAP" config user.email "$(git config user.email)"
 mkdir -p "$TAP/Casks"
 sed -e "s/__VERSION__/${VERSION}/" -e "s/__SHA256__/${SHA256}/" \
     -e "s/__OWNER__/${OWNER}/g" -e "s/__BUNDLE_ID__/${BUNDLE_ID}/g" \
