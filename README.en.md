@@ -44,7 +44,7 @@ On first launch the app asks to add hooks to Claude Code's settings file (`~/.cl
 - The original file is backed up as `settings.json.bak-session-board-<timestamp>`.
 - The app registers itself to open at login.
 - Sessions that are already running show up from their **next** prompt.
-- **Codex runs new hooks only after you trust them.** After connecting, approve the hooks when Codex asks you to review them ("Trust all and continue" in the CLI).
+- **Codex runs new hooks only after you trust them.** Approve them with the hook icon (yellow dot) in the Codex app composer, or "Trust all and continue" in the CLI. See [Claude Code and Codex hooks and approval](#claude-code-and-codex-hooks-and-approval).
 
 ## Usage
 
@@ -89,6 +89,37 @@ With update notifications on, the app checks for a new version at launch and eve
 - Homebrew installs: the app runs `brew upgrade` and relaunches.
 
 You can also run `/Applications/SessionBoard.app/Contents/MacOS/SessionBoard --self-update` to update from a terminal.
+
+## Claude Code and Codex hooks and approval
+
+To know each session's state, SessionBoard adds **hooks** to Claude Code and Codex. A hook is a small command the tool runs for you when something happens in a session (a prompt is sent, a tool runs, it waits for approval, it finishes, …).
+
+### Hooks it adds
+
+| Tool | Settings file | Command |
+|---|---|---|
+| Claude Code | `~/.claude/settings.json` | `~/.claude/session-board/bin/hook.sh` |
+| Codex | `~/.codex/hooks.json` | `~/.claude/session-board/bin/hook.sh --agent codex` |
+
+- Existing settings and hooks are left as they are; only the missing hooks are added. The original file is backed up next to it as `.bak-session-board-<timestamp>`.
+- The hook only writes session state files to `~/.claude/session-board/state/` and shows a notification when you're needed. It never changes a session, never approves anything for you, and sends nothing off your Mac.
+
+### How approval differs
+
+**Claude Code** runs hooks as soon as they're in the settings file — no approval step. (Sessions that are already running are picked up from their next prompt.)
+
+**Codex**, for security, runs **new or changed hooks only after you trust them**. Untrusted hooks are skipped silently, so Codex sessions don't appear until you approve.
+
+- **Codex app:** click the **hook icon (with a yellow dot)** on the right of the composer and approve the SessionBoard hooks.
+- **Codex CLI:** choose **Trust all and continue** in the "Review hooks" prompt at startup, or review them with `/hooks`.
+- **Approving once covers both the app and the CLI.** Trust is stored in `[hooks.state]` in `~/.codex/config.toml`.
+- **Updating SessionBoard does not require approving again.** Codex remembers trust per hook definition in `hooks.json`, and SessionBoard doesn't change those definitions on update. (Changes to the hook script's contents don't matter.)
+- SessionBoard never writes trust records for you — that would bypass Codex's security review, so approval is always yours.
+
+### Check or turn off
+
+- See the connection state and connect/disconnect under **설정… → 관리 → Claude Code 연동 / Codex 연동** (Settings → Manage).
+- Disconnecting removes only the SessionBoard hooks from that settings file. Codex's trust records (`[hooks.state]`) are managed by Codex and may remain.
 
 ## How it works
 

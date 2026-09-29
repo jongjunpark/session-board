@@ -42,7 +42,7 @@ Homebrew 로 설치하면 이 과정이 필요 없어요.
 - 수정하기 전의 원본은 `settings.json.bak-session-board-<시각>` 으로 백업해 둬요.
 - 로그인할 때 자동으로 켜지도록 등록해요.
 - 이미 실행 중인 세션은 **다음 요청부터** 목록에 나타나요.
-- **Codex 는 새 훅을 직접 허용해야 실행해요.** 연결한 뒤 Codex 를 열 때 훅을 검토하라는 창이 뜨면 허용해 주세요. (CLI 에서는 "Trust all and continue")
+- **Codex 는 새 훅을 직접 허용해야 실행해요.** Codex 앱은 입력창의 갈고리 아이콘(노란 점), CLI 는 "Trust all and continue" 로 허용해 주세요. 자세한 내용은 [Claude Code·Codex 훅과 권한](#claude-codecodex-훅과-권한)을 보세요.
 
 ## 사용법
 
@@ -87,6 +87,37 @@ Homebrew 로 설치하면 이 과정이 필요 없어요.
 - Homebrew 로 설치했다면 `brew upgrade` 로 업데이트하고 다시 켜요.
 
 터미널에서 `/Applications/SessionBoard.app/Contents/MacOS/SessionBoard --self-update` 를 실행해도 새 버전이 있으면 바로 업데이트해요.
+
+## Claude Code·Codex 훅과 권한
+
+SessionBoard 는 세션 상태를 알기 위해 Claude Code 와 Codex 에 **훅**을 추가해요. 훅은 세션에 일이 생길 때(요청을 보냄, 도구를 씀, 승인을 기다림, 끝남 등) 도구가 대신 실행해 주는 작은 명령이에요.
+
+### 추가하는 훅
+
+| 도구 | 설정 파일 | 실행하는 명령 |
+|---|---|---|
+| Claude Code | `~/.claude/settings.json` | `~/.claude/session-board/bin/hook.sh` |
+| Codex | `~/.codex/hooks.json` | `~/.claude/session-board/bin/hook.sh --agent codex` |
+
+- 이미 있는 다른 설정과 훅은 그대로 두고, 필요한 훅만 더해요. 고치기 전 원본은 같은 폴더에 `.bak-session-board-<시각>` 으로 백업해요.
+- 훅은 세션 상태를 `~/.claude/session-board/state/` 에 파일로 남기고, 확인이 필요할 때 알림을 띄우는 일만 해요. 세션 내용을 바꾸거나 승인을 대신 누르지 않고, 외부로 아무것도 보내지 않아요.
+
+### 허용 방식의 차이
+
+**Claude Code** 는 설정 파일에 훅을 넣으면 바로 동작해요. 따로 허용할 필요가 없어요. (이미 돌고 있던 세션은 다음 요청부터 잡혀요)
+
+**Codex** 는 보안을 위해 **새로 생기거나 바뀐 훅을 사용자가 직접 허용해야** 실행해요. 허용하지 않은 훅은 조용히 건너뛰어서, 허용 전에는 Codex 세션이 목록에 나타나지 않아요.
+
+- **Codex 앱**: 입력창 오른쪽의 **갈고리 아이콘(노란 점이 붙어 있어요)** 을 눌러 SessionBoard 훅을 허용해요.
+- **Codex CLI**: 시작할 때 뜨는 "Review hooks" 창에서 **Trust all and continue** 를 고르거나, `/hooks` 로 검토해 허용해요.
+- **한 번만 허용하면 앱과 CLI 모두에 적용돼요.** 허용 기록은 `~/.codex/config.toml` 의 `[hooks.state]` 에 저장돼요.
+- **SessionBoard 를 업데이트해도 다시 허용할 필요는 없어요.** Codex 는 `hooks.json` 에 적힌 훅 정의를 기준으로 허용 여부를 기억하고, SessionBoard 는 업데이트 때 그 정의를 바꾸지 않아요. (훅 스크립트 내용이 바뀌는 건 영향이 없어요)
+- SessionBoard 가 허용 기록을 대신 써 넣지는 않아요. Codex 의 보안 확인을 우회하는 일이라, 허용은 늘 사용자가 직접 해요.
+
+### 확인하고 끄기
+
+- 연결 상태는 **설정… → 관리 → Claude Code 연동 / Codex 연동** 에서 보고, 연결·연결 해제할 수 있어요.
+- 연결 해제하면 해당 설정 파일에서 SessionBoard 훅만 빠져요. Codex 의 허용 기록(`[hooks.state]`)은 Codex 가 관리하는 것이라 남아 있을 수 있어요.
 
 ## 동작 방식
 
