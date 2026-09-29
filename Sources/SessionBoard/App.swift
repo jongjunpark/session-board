@@ -214,6 +214,10 @@ enum SessionBoardMain {
         // 창 없이 훅만 넣고 빼는 명령 (Homebrew 제거·시험용)
         //   SessionBoard --install-hooks | --uninstall-hooks
         let args = CommandLine.arguments
+        if args.contains("--version") {
+            print(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?")
+            exit(0)
+        }
         // 창 없이 새 버전을 확인해 있으면 바로 업데이트하고 끝낸다
         if args.contains("--self-update") {
             Task { @MainActor in
