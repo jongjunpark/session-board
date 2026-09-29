@@ -88,7 +88,7 @@ case "$event" in
     case "$tool" in
       AskUserQuestion) notify_needs_input "질문에 답해 주세요"; write needs_input "질문에 답해 주세요" "" ;;
       ExitPlanMode)    notify_needs_input "계획을 승인해 주세요"; write needs_input "계획을 승인해 주세요" "" ;;
-      request_user_input) notify_needs_input "질문에 답해 주세요"; write needs_input "질문에 답해 주세요" "" ;; # Codex
+      request_user_input*) notify_needs_input "질문에 답해 주세요"; write needs_input "질문에 답해 주세요" "" ;; # Codex
     esac
     ;;
   PermissionRequest)
@@ -117,6 +117,15 @@ case "$event" in
     esac
     ;;
   PostToolUse|PostToolUseFailure|PermissionDenied)
+    # Codex 앱의 질문(request_user_input_async)은 창을 띄우자마자 도구가 끝나고 답을 따로 기다린다.
+    # 그래서 이 도구가 끝난 신호는 "답을 기다리는 중"으로 본다.
+    # (인터넷 등 권한 요청 request_permissions 는 답한 뒤에야 끝나므로 여기가 아니라
+    #  board-json.sh 가 대화 기록에 결과 없이 걸린 호출을 보고 잡는다)
+    if [ "$AGENT" = codex ] && [[ "$tool" == request_user_input* ]]; then
+      [ "$cur" = "needs_input" ] || notify_needs_input "질문에 답해 주세요"
+      write needs_input "질문에 답해 주세요" ""
+      exit 0
+    fi
     # 도구가 돌았으면 진행중. 기록이 없던 세션(보드 설치 전에 시작)이나
     # 새 요청 없이 다시 깨어난 세션(백그라운드 작업 완료 알림 등)도 여기서 올라온다
     if [ "$cur" = "running" ]; then

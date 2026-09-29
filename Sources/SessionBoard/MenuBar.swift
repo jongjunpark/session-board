@@ -102,7 +102,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         if menu.numberOfItems > 0 { menu.addItem(.separator()) }
         menu.addItem(disabled("\(title) \(items.count)"))
         for item in items {
-            let row = action("\(item.title)  ·  \(item.label)") { [weak self] in self?.model.open(item) }
+            let row = action("\(item.agent == "codex" ? ">_" : "✳")  \(item.title)  ·  \(item.label)") { [weak self] in self?.model.open(item) }
             if item.state == "needs_input" {
                 row.attributedTitle = NSAttributedString(
                     string: row.title, attributes: [.foregroundColor: Self.needsColor]

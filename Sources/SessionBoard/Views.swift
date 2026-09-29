@@ -28,7 +28,7 @@ struct BoardView: View {
     private var header: some View {
         HStack(spacing: 8) {
             if !model.collapsed {
-                Text("Claude 세션").font(.system(size: 12, weight: .semibold))
+                Text("SessionBoard").font(.system(size: 12, weight: .semibold))
             }
             // 개수·접기 버튼은 늘 오른쪽 끝에 붙인다 (접고 펴고 호버해도 제자리).
             // 접힌 알약은 폭이 정해져 있지 않아서 빈칸을 넣으면 화면 끝까지 늘어나므로 뺀다
@@ -209,6 +209,7 @@ struct PeekRow: View {
     var body: some View {
         HStack(spacing: 7) {
             StateIcon(item: item).font(.system(size: 10)).frame(width: 12)
+            AgentBadge(agent: item.agent, size: 9)
             Text(item.title)
                 .font(.system(size: 11, weight: .medium))
                 .lineLimit(1)
@@ -266,9 +267,12 @@ struct BoardRow: View {
         HStack(alignment: .top, spacing: 8) {
             StateIcon(item: item).frame(width: 14, height: 16)
             VStack(alignment: .leading, spacing: 2) {
-                Text(item.title)
-                    .font(.system(size: 12, weight: .medium))
-                    .lineLimit(1)
+                HStack(spacing: 5) {
+                    AgentBadge(agent: item.agent)
+                    Text(item.title)
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                }
                 Text(item.label)
                     .font(.system(size: 11))
                     .foregroundStyle(labelColor)
@@ -383,4 +387,28 @@ struct VisualEffect: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
+}
+
+// 어느 도구의 세션인지: Claude 는 주황 ✳, Codex 는 회색 >_ (공식 로고가 아니라 떠올리게 하는 기호)
+struct AgentBadge: View {
+    let agent: String?
+    var size: CGFloat = 10
+
+    static let claudeColor = Color(red: 0.85, green: 0.47, blue: 0.34)
+
+    var body: some View {
+        Group {
+            if agent == "codex" {
+                Text(">_")
+                    .font(.system(size: size, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            } else {
+                Image(systemName: "asterisk")
+                    .font(.system(size: size, weight: .heavy))
+                    .foregroundStyle(AgentBadge.claudeColor)
+            }
+        }
+        .frame(minWidth: size + 4)
+        .accessibilityLabel(agent == "codex" ? "Codex" : "Claude")
+    }
 }

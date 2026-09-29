@@ -44,6 +44,29 @@ for f in "$DIR"/*.json; do
         ;;
     esac
 
+    # Codex: 인터넷 등 권한 요청(request_permissions)·질문은 창이 떠 있는 동안 훅 신호가 없다.
+    # 대화 기록 끝에 결과 없이 걸린 도구 호출이 그런 요청이면 확인 필요로 바꾸고 한 번 알린다.
+    # (답하면 도구가 끝나며 오는 훅 신호로 진행중으로 돌아간다)
+    if [ "$(jq -r '.agent // ""' "$f")" = codex ] && [ "$(jq -r '.state' "$f")" = running ]; then
+      waiting=$(tail -n 80 "$tr" | jq -rs '
+        [ .[] | select(.type? == "response_item") | .payload
+          | select(.type | IN("function_call", "custom_tool_call", "function_call_output", "custom_tool_call_output")) ] as $items
+        | ($items | map(select(.type | endswith("_output")) | .call_id)) as $answered
+        | [ $items[] | select((.type | endswith("_output")) | not) | select(.call_id as $c | ($answered | index($c)) | not) ]
+        | last
+        | if . == null then ""
+          else ((.name // "") + " " + ((.arguments // .input // "") | tostring)) as $call
+            | if ($call | test("request_permissions")) then "권한 승인을 기다려요"
+              elif ($call | test("request_user_input")) then "질문에 답해 주세요"
+              else "" end
+          end' 2>/dev/null)
+      if [ -n "$waiting" ]; then
+        tmp=$(mktemp "$DIR/.tmp.XXXXXX")
+        jq --arg r "$waiting" '.state = "needs_input" | .reason = $r' "$f" >"$tmp" && mv "$tmp" "$f"
+        "$BOARD/bin/notify.sh" "$(jq -r .session_id "$f")" "$waiting" codex >/dev/null 2>&1 &
+      fi
+    fi
+
     # 백그라운드 작업: 대화 기록에 완료 알림(<task-notification>)이 온 것은 목록에서 뺀다
     if [ "$(jq '(.bg // []) | length' "$f")" -gt 0 ]; then
       # 완료가 확인된 호출 번호만 모은다
@@ -129,6 +152,8 @@ jq -c --slurpfile idx "$IDX" --argjson cidx "$CIDX" --argjson now "$(date +%s)" 
     | ($now - $s.started_at) as $el | ($now - $s.mtime) as $idle
     | ($s.cwd | split("/") | last) as $folder
     | ($s | bgcount) as $bgn
+    # 터미널에서 띄운 Codex CLI 세션인지 (띄운 앱이 비어 있거나 Codex 앱이면 앱 세션)
+    | ($src.kind == "codex" and (($s.app_bundle // "") | IN("", "com.openai.codex") | not)) as $codexTerminal
     | (if $bgn > 0 then $now - ($s.bg | min_by(.at).at) else 0 end) as $bgage
     # 백그라운드 작업이 기준 시간을 넘겼고 "더 기다리기"로 미룬 시간도 지났으면 확인 필요
     | ($bgon and $bgn > 0 and $bgage > $bgwarn and $now > ($s.bg_snooze_until // 0)) as $bgwarned
@@ -141,6 +166,7 @@ jq -c --slurpfile idx "$IDX" --argjson cidx "$CIDX" --argjson now "$(date +%s)" 
     | {
         session_id: $s.session_id,
         kind: $src.kind,
+        agent: (if $src.kind == "codex" then "codex" else "claude" end),
         local_id: (if $src.kind == "app" then $src.m.id elif $src.kind == "codex" then $s.session_id else "" end),
         app_bundle: ($s.app_bundle // ""),
         title: (if $src.kind == "app" then (if ($src.m.title // "") == "" then $folder else $src.m.title end)
@@ -162,7 +188,8 @@ jq -c --slurpfile idx "$IDX" --argjson cidx "$CIDX" --argjson now "$(date +%s)" 
                 elif $state == "running" then (if $el < 60 then "방금" else ($el | dur) end)
                 else "\(($now - $s.updated_at) | dur) 전" end),
         label: (
-          (if $src.kind == "terminal" then "터미널 · \($folder) · " elif $src.kind == "codex" then "Codex · " else "" end)
+          # 어느 도구인지는 화면이 제목 앞 기호로 보여 준다 (agent). 터미널 세션만 폴더를 붙인다
+          (if $src.kind == "terminal" or $codexTerminal then "터미널 · \($folder) · " else "" end)
           + (if $s.state == "needs_input" then ($s.reason // "확인이 필요해요")
              elif $bgwarned then "\($bgname) \($bgage | dur)째 · 멈췄는지 확인해 보세요"
              elif $bgn > 0 and $s.state == "done" then "\($bgname) \($bgage | dur)째"

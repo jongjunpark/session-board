@@ -16,6 +16,7 @@ struct BoardItem: Decodable, Identifiable, Equatable {
     let short: String // 짧은 목록용 (예: "12분", "5분 전", "확인 필요")
     let bg_count: Int // 아직 안 끝난 백그라운드 작업 수
     let bg_warn: Bool // 백그라운드 작업이 너무 오래 돌아 확인 필요로 올라온 항목
+    let agent: String? // claude | codex
     var id: String { session_id }
 }
 
@@ -143,12 +144,14 @@ final class BoardModel: ObservableObject {
     }
 
     func open(_ item: BoardItem) {
-        if item.kind == "codex" {
+        // 터미널에서 띄운 Codex CLI 세션은 그 터미널 앱을 앞으로 (Claude 터미널 세션과 같게)
+        let codexTerminal = item.kind == "codex" && !item.app_bundle.isEmpty && item.app_bundle != "com.openai.codex"
+        if item.kind == "codex" && !codexTerminal {
             // Codex 앱에서 그 스레드를 연다
             if let url = URL(string: "codex://threads/\(item.local_id)") { NSWorkspace.shared.open(url) }
             return
         }
-        if item.kind == "terminal" {
+        if item.kind == "terminal" || codexTerminal {
             // 터미널 세션은 특정 탭으로 들어갈 수 없어서, 띄운 앱(iTerm 등)을 앞으로 가져온다
             guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: item.app_bundle) else { return }
             NSWorkspace.shared.openApplication(at: appURL, configuration: NSWorkspace.OpenConfiguration())
