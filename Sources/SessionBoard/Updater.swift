@@ -163,7 +163,9 @@ final class Updater: ObservableObject {
         status = .installing
         do {
             if installedWithHomebrew, let brew = brewPath {
+                // 탭 목록을 먼저 새로 받아야 새 버전이 보인다 (HOMEBREW_NO_AUTO_UPDATE 가 켜져 있어도)
                 try launchHelper("""
+                env -u HOMEBREW_NO_AUTO_UPDATE "\(brew)" update --quiet
                 "\(brew)" upgrade --cask session-board
                 """)
             } else {
