@@ -61,7 +61,7 @@ You get a notification with a sound when a session needs you.
 
 ### Menu bar
 
-The menu bar shows `● needs you  ⟳ running  ✓ done` counts too. Click it for the session list, where you can open, confirm or postpone each session. You can hide the floating window and use only the menu bar (menu bar → **떠 있는 창 보이기/숨기기**, show/hide floating window).
+The menu bar shows `● needs you  ⟳ running  ✓ done` counts too. Click it for the session list, where you can open, confirm or postpone each session. You can hide the floating window and use only the menu bar (menu bar → **플로팅 창 보기/숨기기**, show/hide floating window).
 
 ## Settings
 
@@ -70,7 +70,7 @@ Right-click the top of the window → **설정…** (Settings).
 - **General:** open at login, show in menu bar
 - **Background tasks:** alert when they run long (on/off), threshold (5, 10, 15, 20, 30 minutes or 1 hour; default 15 minutes)
 - **Updates:** update notifications (on/off), check now
-- **Manage:** add or remove the Claude Code hooks, uninstall SessionBoard
+- **Manage:** connect or disconnect Claude Code, delete SessionBoard
 
 ## Updates
 
@@ -98,7 +98,7 @@ Apart from checking GitHub for updates, nothing leaves your Mac — everything i
 
 ## Uninstall
 
-- **In the app:** right-click the top of the window → **설정…** → **세션 보드 제거** (removes the hooks, login item and records), then move the app to the Trash.
+- **In the app:** right-click the top of the window → **설정…** → **SessionBoard 삭제** (disconnects Claude Code, removes the login item and records), then move the app to the Trash.
 - **Homebrew:** `brew uninstall --zap --cask session-board`
 
 ## Build from source

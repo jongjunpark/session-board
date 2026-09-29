@@ -66,7 +66,7 @@ struct BoardView: View {
             Divider()
             Button("설정…") { SettingsWindow.show() }
             Divider()
-            Button("세션 보드 종료") { NSApp.terminate(nil) }
+            Button("SessionBoard 종료") { NSApp.terminate(nil) }
         }
     }
 
@@ -87,8 +87,8 @@ struct BoardView: View {
                     .contentShape(Capsule())
             }
             .buttonStyle(.plain)
-            .help("새 버전 \(release.version) 으로 업데이트")
-            .accessibilityLabel("새 버전 \(release.version) 으로 업데이트")
+            .help("새 버전 \(release.version)으로 업데이트")
+            .accessibilityLabel("새 버전 \(release.version)으로 업데이트")
         }
     }
 
@@ -109,8 +109,8 @@ struct BoardView: View {
     private var content: some View {
         if model.items.isEmpty {
             Text(Installer.hooksInstalled()
-                 ? "지금 도는 세션이 없어요"
-                 : "Claude Code 훅이 없어서 세션을 볼 수 없어요.\n오른쪽 클릭 → 설정에서 훅을 추가해 주세요")
+                 ? "실행 중인 세션이 없어요"
+                 : "Claude Code와 연결되지 않았어요.\n오른쪽 클릭 → 설정에서 연결해 주세요")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .padding(12)
@@ -129,7 +129,7 @@ struct BoardView: View {
     @ViewBuilder
     private var peekContent: some View {
         if model.items.isEmpty {
-            Text("지금 도는 세션이 없어요")
+            Text("실행 중인 세션이 없어요")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 12)
@@ -333,7 +333,7 @@ struct BoardRow: View {
             if item.bg_warn {
                 Button("더 기다리기 (\(BoardConfig.label(BoardConfig.shared.bgWarnMinutes)) 뒤 다시 알림)") { model.snooze(item) }
             }
-            Button(item.state == "done" ? "확인 완료" : "목록에서 지우기") { model.check(item) }
+            Button(item.state == "done" ? "확인 완료" : "목록에서 제거") { model.check(item) }
         }
     }
 

@@ -184,13 +184,13 @@ enum Installer {
 
     static func askToInstallHooks() {
         let alert = NSAlert()
-        alert.messageText = "Claude Code 에 세션 보드 훅을 추가할까요?"
+        alert.messageText = "Claude Code와 연결할까요?"
         alert.informativeText = """
         세션이 시작·대기·완료될 때마다 상태를 기록하려면 ~/.claude/settings.json 에 훅이 필요해요.
         이미 있는 다른 설정은 그대로 두고, 고치기 전 원본을 같은 폴더에 백업해 둬요.
         이미 돌고 있는 세션은 다음 요청부터 잡혀요.
         """
-        alert.addButton(withTitle: "추가")
+        alert.addButton(withTitle: "연결")
         alert.addButton(withTitle: "나중에")
         NSApp.activate(ignoringOtherApps: true)
         if alert.runModal() == .alertFirstButtonReturn {
@@ -198,7 +198,7 @@ enum Installer {
                 try installHooks()
                 UserDefaults.standard.set(false, forKey: "hooksDeclined")
             } catch {
-                Installer.alert("훅을 추가하지 못했어요", error.localizedDescription)
+                Installer.alert("Claude Code와 연결하지 못했어요", error.localizedDescription)
             }
         } else {
             UserDefaults.standard.set(true, forKey: "hooksDeclined")
@@ -208,16 +208,16 @@ enum Installer {
     // 훅·로그인 항목·기록을 모두 걷어내고 앱을 끝낸다 (앱 파일은 사용자가 휴지통으로)
     static func uninstallEverything() {
         let alert = NSAlert()
-        alert.messageText = "세션 보드를 제거할까요?"
-        alert.informativeText = "Claude Code 설정에서 세션 보드 훅을 빼고, 로그인 시 실행을 끄고, ~/.claude/session-board 를 지운 뒤 앱을 종료해요. 앱 파일은 직접 휴지통으로 옮겨 주세요."
-        alert.addButton(withTitle: "제거")
+        alert.messageText = "SessionBoard를 삭제할까요?"
+        alert.informativeText = "Claude Code 연결을 해제하고, 로그인 시 자동 실행을 끄고, ~/.claude/session-board 를 지운 뒤 앱을 종료해요. 앱 파일은 직접 휴지통으로 옮겨 주세요."
+        alert.addButton(withTitle: "삭제")
         alert.addButton(withTitle: "취소")
         NSApp.activate(ignoringOtherApps: true)
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         do {
             try uninstallHooks()
         } catch {
-            Installer.alert("훅을 빼지 못했어요", error.localizedDescription)
+            Installer.alert("Claude Code 연결을 해제하지 못했어요", error.localizedDescription)
             return
         }
         if launchAtLogin { setLaunchAtLogin(false) }

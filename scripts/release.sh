@@ -14,6 +14,8 @@ ZIP="build/${APP_NAME}.zip"
 ACTIVE=$(gh api user --jq .login)
 [ "$ACTIVE" = "$OWNER" ] || { echo "gh 활성 계정이 $ACTIVE 예요. 먼저: gh auth switch --user $OWNER"; exit 1; }
 git rev-parse "$TAG" >/dev/null 2>&1 && { echo "$TAG 태그가 이미 있어요"; exit 1; }
+NOTES=$(./scripts/release-notes.sh "$VERSION")
+[ -n "$NOTES" ] || { echo "CHANGELOG.md 에 ## $TAG 절이 없어요. 먼저 적어 주세요"; exit 1; }
 
 VERSION="$VERSION" ./scripts/build-app.sh
 rm -f "$ZIP"
@@ -23,7 +25,8 @@ echo "▸ $ZIP  sha256=$SHA256"
 
 git tag "$TAG"
 git push origin main "$TAG"
-gh release create "$TAG" "$ZIP" --title "${APP_NAME} ${TAG}" --generate-notes
+# 릴리스 노트는 CHANGELOG.md 의 "## vX.Y.Z" 절에서 가져온다
+gh release create "$TAG" "$ZIP" --title "${APP_NAME} ${TAG}" --notes "$NOTES"
 
 echo "▸ Homebrew 탭 갱신 ($TAP_REPO)"
 TAP=$(mktemp -d)

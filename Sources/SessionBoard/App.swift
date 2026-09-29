@@ -126,7 +126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MenuBarController.current = menuBar
         self.menuBar = menuBar
 
-        // 떠 있는 창 보이기/숨기기 (메뉴 막대에서). 숨긴 상태는 기억한다
+        // 플로팅 창 보기/숨기기 (메뉴 막대에서). 숨긴 상태는 기억한다
         if UserDefaults.standard.bool(forKey: "boardHidden") { panel.orderOut(nil) }
         NotificationCenter.default.addObserver(forName: .toggleBoardWindow, object: nil, queue: .main) { [weak panel] _ in
             MainActor.assumeIsolated {

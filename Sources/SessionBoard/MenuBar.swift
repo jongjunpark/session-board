@@ -83,16 +83,16 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         section(menu, "진행중", model.running)
         section(menu, "완료", model.done)
         if model.items.isEmpty {
-            menu.addItem(disabled("지금 도는 세션이 없어요"))
+            menu.addItem(disabled("실행 중인 세션이 없어요"))
         }
         menu.addItem(.separator())
         if !model.done.isEmpty {
             menu.addItem(action("완료 전부 확인") { [weak self] in self?.model.checkAllDone() })
         }
         if let release = Updater.shared.available {
-            menu.addItem(action("새 버전 \(release.version) 으로 업데이트…") { Updater.shared.confirmInstall(release) })
+            menu.addItem(action("새 버전 \(release.version)으로 업데이트…") { Updater.shared.confirmInstall(release) })
         }
-        menu.addItem(action("떠 있는 창 보이기/숨기기") { NotificationCenter.default.post(name: .toggleBoardWindow, object: nil) })
+        menu.addItem(action("플로팅 창 보기/숨기기") { NotificationCenter.default.post(name: .toggleBoardWindow, object: nil) })
         menu.addItem(action("설정…") { SettingsWindow.show() })
         menu.addItem(action("종료") { NSApp.terminate(nil) })
     }
@@ -115,7 +115,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
                 let wait = BoardConfig.label(BoardConfig.shared.bgWarnMinutes)
                 sub.addItem(action("더 기다리기 (\(wait) 뒤 다시 알림)") { [weak self] in self?.model.snooze(item) })
             }
-            sub.addItem(action(item.state == "done" ? "확인 완료" : "목록에서 지우기") { [weak self] in
+            sub.addItem(action(item.state == "done" ? "확인 완료" : "목록에서 제거") { [weak self] in
                 self?.model.check(item)
             })
             row.submenu = sub

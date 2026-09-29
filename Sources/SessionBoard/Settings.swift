@@ -12,7 +12,7 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section("일반") {
-                Toggle("로그인할 때 켜기", isOn: $launchAtLogin)
+                Toggle("로그인 시 자동 실행", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, on in
                         Installer.setLaunchAtLogin(on)
                         launchAtLogin = Installer.launchAtLogin
@@ -22,8 +22,8 @@ struct SettingsView: View {
             }
 
             Section {
-                Toggle("오래 걸리면 알림", isOn: $config.bgWarnEnabled)
-                Picker("알림 기준 시간", selection: $config.bgWarnMinutes) {
+                Toggle("장시간 실행 알림", isOn: $config.bgWarnEnabled)
+                Picker("알림 시간", selection: $config.bgWarnMinutes) {
                     ForEach(BoardConfig.bgWarnChoices, id: \.self) { minutes in
                         Text(BoardConfig.label(minutes)).tag(minutes)
                     }
@@ -32,7 +32,7 @@ struct SettingsView: View {
             } header: {
                 Text("백그라운드 작업")
             } footer: {
-                Text("백그라운드 작업이 이 시간보다 오래 돌면 확인 필요로 올리고 알려요. \"더 기다리기\"를 누르면 같은 시간만큼 미뤄요.")
+                Text("설정한 시간이 지나도 작업이 끝나지 않으면 알려 드려요. \"더 기다리기\"를 누르면 같은 시간만큼 다시 기다려요.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -54,25 +54,25 @@ struct SettingsView: View {
                     HStack(spacing: 8) {
                         Text(updater.currentVersion).foregroundStyle(.secondary)
                         if let release = updater.available {
-                            Button("\(release.version) 로 업데이트") { updater.confirmInstall(release) }
+                            Button("\(release.version)로 업데이트") { updater.confirmInstall(release) }
                         }
                     }
                 }
             }
 
             Section("관리") {
-                LabeledContent("Claude Code 훅") {
+                LabeledContent("Claude Code 연동") {
                     HStack(spacing: 8) {
-                        Text(hooksInstalled ? "설치됨" : "없음").foregroundStyle(.secondary)
+                        Text(hooksInstalled ? "연결됨" : "연결 안 됨").foregroundStyle(.secondary)
                         if hooksInstalled {
-                            Button("빼기") { run { try Installer.uninstallHooks() } }
+                            Button("연결 해제") { run { try Installer.uninstallHooks() } }
                         } else {
-                            Button("추가") { run { try Installer.installHooks() } }
+                            Button("연결") { run { try Installer.installHooks() } }
                         }
                     }
                 }
-                LabeledContent("세션 보드 제거") {
-                    Button("제거…") { Installer.uninstallEverything() }
+                LabeledContent("SessionBoard 삭제") {
+                    Button("삭제…") { Installer.uninstallEverything() }
                 }
             }
         }
