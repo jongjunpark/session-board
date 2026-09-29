@@ -97,8 +97,9 @@ jq -r --slurpfile idx "$IDX" --argjson now "$(date +%s)" "$FILTER_COMMON"'
   | .path' <<<"$states" | while IFS= read -r p; do rm -f "$p"; done
 
 jq -c --slurpfile idx "$IDX" --argjson now "$(date +%s)" --argjson stale "$STALE_SEC" --argjson bgwarn "$BG_WARN_SEC" --argjson bgon "$BG_WARN_ON" "$FILTER_COMMON"'
+  # 큰 단위 하나만: 방금 · N분 · N시간 · N일
   def dur: if . < 60 then "방금" elif . < 3600 then "\(. / 60 | floor)분"
-           else "\(. / 3600 | floor)시간 \((. % 3600) / 60 | floor)분" end;
+           elif . < 86400 then "\(. / 3600 | floor)시간" else "\(. / 86400 | floor)일" end;
   def rank: {needs_input: 0, running: 1, done: 2}[.state] // 3;
 
   [ .[] | . as $s | ($s | source($idx[0])) as $src
