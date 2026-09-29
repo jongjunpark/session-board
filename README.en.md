@@ -11,6 +11,8 @@ SessionBoard shows the state of every session at a glance, in a small floating w
 
 It covers both Claude desktop app (Code tab) sessions and `claude` sessions started from a terminal.
 
+<p align="center"><img src="docs/images/overview.webp" alt="Session states in the floating window and the menu bar" width="820"></p>
+
 > The UI is in Korean for now.
 
 ## Install
@@ -47,6 +49,10 @@ On first launch the app asks to add hooks to Claude Code's settings file (`~/.cl
 
 Most of the time the window stays collapsed and only shows counts.
 
+| Collapsed | On hover | On click |
+|:---:|:---:|:---:|
+| <img src="docs/images/collapsed.png" alt="Collapsed window showing only counts" width="200"> | <img src="docs/images/peek.png" alt="Compact one-line-per-session list" width="260"> | <img src="docs/images/board.webp" alt="Full window with summaries and buttons" width="300"> |
+
 | Do this | What happens |
 |---|---|
 | Hover over the collapsed window | A compact one-line-per-session list unfolds |
@@ -60,6 +66,8 @@ Most of the time the window stays collapsed and only shows counts.
 You get a notification with a sound when a session needs you.
 
 ### Menu bar
+
+<p align="center"><img src="docs/images/menubar.webp" alt="Session list opened from the menu bar" width="560"></p>
 
 The menu bar shows `● needs you  ⟳ running  ✓ done` counts too. Click it for the session list, where you can open, confirm or postpone each session. You can hide the floating window and use only the menu bar (menu bar → **플로팅 창 보기/숨기기**, show/hide floating window).
 

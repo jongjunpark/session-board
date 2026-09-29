@@ -11,6 +11,8 @@ SessionBoard 는 화면 구석에 떠 있는 작은 창과 메뉴 막대에서 �
 
 Claude 데스크톱 앱(Code 탭)에서 연 세션과 터미널에서 실행한 `claude` 세션을 모두 보여 줘요.
 
+<p align="center"><img src="docs/images/overview.webp" alt="플로팅 창과 메뉴 막대에 세션 상태가 보이는 모습" width="820"></p>
+
 ## 설치
 
 macOS 15 이상에서 쓸 수 있어요 (Apple Silicon·Intel). Liquid Glass UI 는 macOS 26 이상에서 보여요.
@@ -45,6 +47,10 @@ Homebrew 로 설치하면 이 과정이 필요 없어요.
 
 평소에는 세션 개수만 보이도록 작게 접혀 있어요.
 
+| 접힌 상태 | 마우스를 올리면 | 클릭하면 |
+|:---:|:---:|:---:|
+| <img src="docs/images/collapsed.png" alt="세션 개수만 보이는 접힌 창" width="200"> | <img src="docs/images/peek.png" alt="세션이 한 줄씩 보이는 간단한 목록" width="260"> | <img src="docs/images/board.webp" alt="요약과 버튼이 보이는 큰 창" width="300"> |
+
 | 이렇게 하면 | 이렇게 돼요 |
 |---|---|
 | 접힌 창에 마우스를 올려 두기 | 세션 목록이 한 줄씩 간단히 펼쳐져요 |
@@ -56,6 +62,8 @@ Homebrew 로 설치하면 이 과정이 필요 없어요.
 | 창을 드래그하기 | 원하는 곳으로 옮길 수 있어요. 위치는 기억해 둬요 |
 
 ### 메뉴 막대
+
+<p align="center"><img src="docs/images/menubar.webp" alt="메뉴 막대에서 연 세션 목록" width="560"></p>
 
 메뉴 막대에도 `● 확인 필요  ⟳ 진행중  ✓ 완료` 개수가 표시돼요. 누르면 세션 목록이 열리고, 세션마다 열기·확인·더 기다리기를 할 수 있어요. 떠 있는 창을 숨기고 메뉴 막대만 쓸 수도 있어요 (메뉴 막대 → **플로팅 창 보기/숨기기**).
 
