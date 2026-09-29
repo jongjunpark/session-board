@@ -137,6 +137,12 @@ Apart from checking GitHub for updates, nothing leaves your Mac — everything i
 - If Claude ends a turn by asking a question in plain text (no choice dialog), it shows as done, not as needing you.
 - Clicking a terminal session brings the terminal app forward but can't switch to the exact tab.
 
+- Codex exposes fewer hook signals than Claude Code, so these cases are **not** detected as needing you:
+  - waiting for approval of a plan (the turn ends, so it shows as done)
+  - an MCP server asking for input or sign-in
+  - scheduled (automation) runs can't be told apart and are listed like other sessions
+  - terminal commands left running after the turn ends are not tracked (the background task warning is Claude Code only)
+
 ## Uninstall
 
 - **In the app:** right-click the top of the window → **설정…** → **SessionBoard 삭제** (disconnects Claude Code and Codex, removes the login item and records), then move the app to the Trash.

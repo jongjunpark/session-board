@@ -44,6 +44,30 @@ for f in "$DIR"/*.json; do
         ;;
     esac
 
+    # Codex: 턴이 오류로 실패하면 Stop 훅이 오지 않는다. 대화 기록의 마지막 턴 기록을 보고 끝났는지 정한다.
+    #   task_complete (error 있음) → 오류로 멈춤 / task_complete → 완료 / turn_aborted → 중단됨
+    if [ "$(jq -r '.agent // ""' "$f")" = codex ] && [ "$(jq -r '.state' "$f")" != done ]; then
+      last=$(LC_ALL=C /usr/bin/grep -E '"type":"(task_started|task_complete|turn_aborted)"' "$tr" | tail -1)
+      ended=$(jq -rc '
+        .payload as $p
+        | if $p.type == "task_complete" then
+            if $p.error != null then
+              {reason: "오류로 멈춤",
+               summary: ((($p.error.message // "") | (fromjson? // .) | if type == "object" then (.error.message // .message // tostring) else tostring end) | .[0:80])}
+            else
+              {reason: "",
+               summary: (($p.last_agent_message // "") | split("\n") | map(select(test("\\S"))) | (.[0] // "") | .[0:80])}
+            end
+          elif $p.type == "turn_aborted" then {reason: "중단됨", summary: ""}
+          else empty end' <<<"$last" 2>/dev/null)
+      if [ -n "$ended" ]; then
+        tmp=$(mktemp "$DIR/.tmp.XXXXXX")
+        jq --argjson e "$ended" --argjson now "$(date +%s)" \
+          '.state = "done" | .reason = $e.reason | .summary = (if $e.summary == "" then (.summary // "") else $e.summary end) | .updated_at = $now' \
+          "$f" >"$tmp" && mv "$tmp" "$f"
+      fi
+    fi
+
     # Codex: 인터넷 등 권한 요청(request_permissions)·질문은 창이 떠 있는 동안 훅 신호가 없다.
     # 대화 기록 끝에 결과 없이 걸린 도구 호출이 그런 요청이면 확인 필요로 바꾸고 한 번 알린다.
     # (답하면 도구가 끝나며 오는 훅 신호로 진행중으로 돌아간다)
