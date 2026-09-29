@@ -85,13 +85,25 @@ case "$event" in
     esac
     ;;
   PermissionRequest)
-    notify_needs_input "권한 승인: $tool"
-    write needs_input "권한 승인: $tool" ""
+    # 질문·계획 승인처럼 이미 더 정확한 사유를 적어 둔 대기는 덮어쓰지 않는다
+    if [ "$cur" != "needs_input" ]; then
+      notify_needs_input "권한 승인: $tool"
+      write needs_input "권한 승인: $tool" ""
+    fi
     ;;
   Notification)
     case "$(jq -r '.notification_type // empty' <<<"$input")" in
       permission_prompt|elicitation_dialog)
+        [ "$cur" = "needs_input" ] && exit 0 # 위와 같은 이유로 덮어쓰지 않는다
         msg=$(jq -r '.message // "확인이 필요해요"' <<<"$input")
+        # Claude Code 의 영어 알림 문구를 옮긴다: "Claude needs your permission to use Bash" → "권한 승인: Bash"
+        asked=$(sed -n 's/^Claude needs your permission to use \(.*\)$/\1/p' <<<"$msg")
+        case "$asked" in
+          "") ;;
+          AskUserQuestion) msg="질문에 답해 주세요" ;;
+          ExitPlanMode) msg="계획을 승인해 주세요" ;;
+          *) msg="권한 승인: $asked" ;;
+        esac
         notify_needs_input "$msg"
         write needs_input "$msg" ""
         ;;

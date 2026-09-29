@@ -57,8 +57,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
-        Installer.prepareOnLaunch()
-        BoardConfig.shared.save() // 스크립트가 읽을 설정 파일을 늘 만들어 둔다
+        if !demoMode {
+            Installer.prepareOnLaunch()
+            BoardConfig.shared.save() // 스크립트가 읽을 설정 파일을 늘 만들어 둔다
+        }
 
         let panel = BoardPanel(
             contentRect: NSRect(x: 0, y: 0, width: 300, height: 60),
@@ -96,7 +98,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.host = host
 
         let size = contentSize(collapsed: model.collapsed, peek: false, items: model.items)
-        let topRight = savedTopRight() ?? defaultTopRight()
+        // 데모는 저장된 위치를 쓰지 않고 화면 가운데쯤에 띄운다
+        let topRight = demoMode ? demoTopRight() : (savedTopRight() ?? defaultTopRight())
         panel.setFrame(NSRect(x: topRight.x - size.width, y: topRight.y - size.height,
                               width: size.width, height: size.height), display: true)
         panel.orderFrontRegardless()
@@ -107,7 +110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak panel, weak self] _ in
             MainActor.assumeIsolated {
                 guard let frame = panel?.frame else { return }
-                UserDefaults.standard.set([frame.maxX, frame.maxY], forKey: "topRight")
+                if !demoMode { UserDefaults.standard.set([frame.maxX, frame.maxY], forKey: "topRight") }
                 // 사용자가 끄는 중일 때만 (크기 맞추느라 창이 움직인 건 제외) 호버 목록을 막는다
                 if self?.isResizing == false { self?.model.holdPeek() }
             }
@@ -115,6 +118,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         model.onRequest = { [weak self] collapsed, peek, items in
             self?.transition(collapsed: collapsed, peek: peek, items: items)
+        }
+        if demoMode {
+            model.request(collapsed: false, peek: false, items: DemoData.items)
+            return
         }
         // 새 버전 표시가 생기거나 없어지면 창 크기를 다시 맞춘다
         Updater.shared.onAvailabilityChange = { [weak self] in self?.model.request() }
@@ -200,6 +207,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 모니터 구성이 바뀌어 화면 밖이면 기본 위치로
         let visible = NSScreen.screens.contains { $0.frame.insetBy(dx: -20, dy: -20).contains(point) }
         return visible ? point : nil
+    }
+
+    private func demoTopRight() -> NSPoint {
+        let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        return NSPoint(x: screen.midX + 200, y: screen.midY + 250)
     }
 
     private func defaultTopRight() -> NSPoint {

@@ -54,7 +54,7 @@ final class BoardModel: ObservableObject {
 
     // 애니메이션과 함께 화면 상태를 바꾼다 (창 크기는 이미 넉넉히 맞춰진 상태)
     func apply(collapsed: Bool, peek: Bool, items: [BoardItem], animated: Bool = true, persist: Bool = true) {
-        if persist, collapsed != self.collapsed { UserDefaults.standard.set(collapsed, forKey: "collapsed") }
+        if persist, !demoMode, collapsed != self.collapsed { UserDefaults.standard.set(collapsed, forKey: "collapsed") }
         let change = {
             self.collapsed = collapsed
             self.peek = peek
@@ -117,7 +117,7 @@ final class BoardModel: ObservableObject {
     var done: [BoardItem] { items.filter { $0.state == "done" } }
 
     func refresh() {
-        guard !loading else { return }
+        guard !demoMode, !loading else { return }
         loading = true
         Task.detached {
             let next = BoardModel.load()
