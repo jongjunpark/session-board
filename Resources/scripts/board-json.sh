@@ -114,7 +114,11 @@ for f in "$DIR"/*.json; do
       fi
       # 너무 오래 도는 작업이 있으면 알림을 한 번 보낸다
       now=$(date +%s)
-      oldest=$(jq -r '(.bg // []) | if length > 0 then (min_by(.at).at) else 0 end' "$f")
+      oldest=$(jq -r '
+        (if (.agent // "") == "codex"
+         then (if .state == "done" then ((.bg // []) | map(.at = ([.at, (.updated_at // 0)] | max))) else [] end)
+         else (.bg // []) end)
+        | if length > 0 then (min_by(.at).at) else 0 end' "$f")
       if [ "$BG_WARN_ON" = true ] && [ "$oldest" -gt 0 ] && [ $((now - oldest)) -gt $BG_WARN_SEC ] \
         && [ "$now" -gt "$(jq -r '.bg_snooze_until // 0' "$f")" ] && [ "$(jq -r '.bg_warned // false' "$f")" != true ]; then
         what="백그라운드 작업"; [ "$(jq -r '.agent // ""' "$f")" = codex ] && what="명령"
@@ -182,10 +186,15 @@ jq -c --slurpfile idx "$IDX" --argjson cidx "$CIDX" --argjson now "$(date +%s)" 
     | select(codexHidden($src) | not)
     | ($now - $s.started_at) as $el | ($now - $s.mtime) as $idle
     | ($s.cwd | split("/") | last) as $folder
-    | ($s | bgcount) as $bgn
+    # 백그라운드 작업 목록. Codex 명령은 턴이 끝난 뒤에도 남아 도는 것만 백그라운드로 본다
+    # (턴 안에서 도는 명령은 표시·경고하지 않는다). 나이도 턴이 끝난 때부터 잰다
+    | (if $src.kind == "codex"
+       then (if $s.state == "done" then (($s.bg // []) | map(.at = ([.at, $s.updated_at] | max))) else [] end)
+       else ($s.bg // []) end) as $bglist
+    | ($bglist | length) as $bgn
     # 터미널에서 띄운 Codex CLI 세션인지 (띄운 앱이 비어 있거나 Codex 앱이면 앱 세션)
     | ($src.kind == "codex" and (($s.app_bundle // "") | IN("", "com.openai.codex") | not)) as $codexTerminal
-    | (if $bgn > 0 then $now - ($s.bg | min_by(.at).at) else 0 end) as $bgage
+    | (if $bgn > 0 then $now - ($bglist | min_by(.at).at) else 0 end) as $bgage
     # 백그라운드 작업이 기준 시간을 넘겼고 "더 기다리기"로 미룬 시간도 지났으면 확인 필요
     | ($bgon and $bgn > 0 and $bgage > $bgwarn and $now > ($s.bg_snooze_until // 0)) as $bgwarned
     # 화면에 보일 상태: 확인 필요 > 오래 걸리는 백그라운드 > 답은 끝났지만 백그라운드가 도는 중 > 원래 상태
