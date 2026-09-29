@@ -31,8 +31,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true
     }
 
-    func setEnabled(_ on: Bool) {
-        UserDefaults.standard.set(on, forKey: Self.enabledKey)
+    func setEnabled(_ on: Bool, persist: Bool = true) {
+        if persist { UserDefaults.standard.set(on, forKey: Self.enabledKey) }
         if on {
             guard statusItem == nil else { return }
             let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)

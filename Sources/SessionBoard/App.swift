@@ -121,6 +121,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if demoMode {
             model.request(collapsed: false, peek: false, items: DemoData.items)
+            // 메뉴 막대도 예시 데이터로 (켜짐 설정은 저장하지 않는다)
+            let menuBar = MenuBarController(model: model)
+            menuBar.setEnabled(true, persist: false)
+            self.menuBar = menuBar
             return
         }
         // 새 버전 표시가 생기거나 없어지면 창 크기를 다시 맞춘다
