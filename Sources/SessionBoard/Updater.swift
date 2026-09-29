@@ -103,6 +103,7 @@ final class Updater: ObservableObject {
         var request = URLRequest(url: URL(string: "https://api.github.com/repos/\(repository)/releases/latest")!)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.timeoutInterval = 15
+        request.cachePolicy = .reloadIgnoringLocalCacheData // 저장해 둔 옛 응답을 다시 쓰면 새 버전을 못 본다
         let (data, response) = try await URLSession.shared.data(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
 
