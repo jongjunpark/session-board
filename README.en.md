@@ -9,7 +9,7 @@ SessionBoard shows the state of every session at a glance, in a small floating w
 - **Needs you**: it's your turn — a permission prompt, a multiple-choice question, plan approval, or a background task that has been running too long.
 - **Done**: finished. Shows the first line of the last reply and **stays until you confirm it**.
 
-It covers Claude desktop app (Code tab) sessions, `claude` sessions started from a terminal, and Codex (app and CLI) sessions. Codex sessions are labeled **Codex**.
+It covers Claude desktop app (Code tab) sessions, `claude` sessions started from a terminal, and Codex (app and CLI) sessions. A symbol before each title tells the tools apart: **Claude is an orange ✳, Codex is `>_`**.
 
 <p align="center"><img src="docs/images/overview.webp" alt="Session states in the floating window and the menu bar" width="820"></p>
 
@@ -58,7 +58,7 @@ Most of the time the window stays collapsed and only shows counts.
 |---|---|
 | Hover over the collapsed window | A compact one-line-per-session list unfolds |
 | Click the collapsed window | Opens the full window with summaries and buttons |
-| Click a session | Opens it in the Claude or Codex app (Claude sessions started in a terminal bring that terminal app forward) |
+| Click a session | Opens it in the Claude or Codex app (sessions started in a terminal bring that terminal app forward) |
 | **확인** (Confirm) on a done session | Removes it from the list (appears on hover) |
 | **더 기다리기** (Wait longer) | Postpones the long-running background task alert by the configured time |
 | Right-click the top of the window | Confirm all done, refresh, settings, quit |
