@@ -61,6 +61,31 @@ write() {
 }
 
 # 백그라운드로 띄운 도구(Bash·Agent 등)를 기록한다
+# Codex: 명령(Bash) 이 시작되면 기록하고, 짝이 되는 PostToolUse 가 오면 뺀다.
+# (Claude 의 백그라운드 작업과 같은 bg 목록을 쓰되, 완료 알림 대신 tool_use_id 로 짝을 맞춘다)
+codex_cmd_start() {
+  [ -f "$file" ] || return 0
+  local tmp
+  tmp=$(mktemp "$DIR/.tmp.XXXXXX")
+  jq --argjson in "$input" --argjson now "$(date +%s)" '
+    .bg = ((.bg // []) + [{
+      tool_use_id: ($in.tool_use_id // ""),
+      task_id: "",
+      kind: "command",
+      what: (($in.tool_input.command // $in.tool_name // "") | tostring | .[0:60]),
+      at: $now
+    }])' "$file" >"$tmp" && mv "$tmp" "$file"
+}
+
+codex_cmd_end() {
+  [ -f "$file" ] || return 0
+  local id tmp
+  id=$(jq -r '.tool_use_id // empty' <<<"$input")
+  [ -n "$id" ] || return 0
+  tmp=$(mktemp "$DIR/.tmp.XXXXXX")
+  jq --arg id "$id" '.bg = ((.bg // []) | map(select(.tool_use_id != $id)))' "$file" >"$tmp" && mv "$tmp" "$file"
+}
+
 add_bg() {
   [ "$(jq -r '.tool_input.run_in_background // false' <<<"$input")" = "true" ] || return 0
   [ -f "$file" ] || return 0
@@ -89,6 +114,12 @@ case "$event" in
       AskUserQuestion) notify_needs_input "질문에 답해 주세요"; write needs_input "질문에 답해 주세요" "" ;;
       ExitPlanMode)    notify_needs_input "계획을 승인해 주세요"; write needs_input "계획을 승인해 주세요" "" ;;
       request_user_input*) notify_needs_input "질문에 답해 주세요"; write needs_input "질문에 답해 주세요" "" ;; # Codex
+      Bash) # Codex: 명령 시작 (진행중으로 올리고 실행 중인 명령으로 기록)
+        if [ "$AGENT" = codex ]; then
+          [ "$cur" = "running" ] || write running "" ""
+          codex_cmd_start
+        fi
+        ;;
     esac
     ;;
   PermissionRequest)
@@ -134,6 +165,7 @@ case "$event" in
       write running "" ""
     fi
     [ "$event" = "PostToolUse" ] && [ "$AGENT" = claude ] && add_bg # 백그라운드 작업 추적은 Claude 만
+    [ "$AGENT" = codex ] && codex_cmd_end # Codex: 끝난 명령은 실행 중 목록에서 뺀다
     # 백그라운드 작업을 직접 멈춘 경우엔 완료 알림이 오지 않으므로 여기서 뺀다
     case "$tool" in
       TaskStop|KillShell|KillBash)
@@ -155,8 +187,10 @@ case "$event" in
   StopFailure)
     write done "오류로 멈춤" ""
     ;;
-  Interrupt) # Codex: 도중에 멈춤
+  Interrupt) # Codex: 도중에 멈춤 (도는 명령도 함께 멈추므로 실행 중 목록을 비운다)
     write done "중단됨" ""
+    tmp=$(mktemp "$DIR/.tmp.XXXXXX")
+    jq '.bg = []' "$file" >"$tmp" && mv "$tmp" "$file"
     ;;
 esac
 exit 0

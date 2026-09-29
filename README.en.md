@@ -77,7 +77,7 @@ The menu bar shows `● needs you  ⟳ running  ✓ done` counts too. Click it f
 Right-click the top of the window → **설정…** (Settings).
 
 - **General:** open at login, show in menu bar
-- **Background tasks:** alert when they run long (on/off), threshold (5, 10, 15, 20, 30 minutes or 1 hour; default 15 minutes)
+- **Background tasks:** alert when they run long (on/off), threshold (5, 10, 15, 20, 30 minutes or 1 hour; default 15 minutes). Applies to Claude Code background tasks and commands running in Codex
 - **Updates:** update notifications (on/off), check now
 - **Manage:** connect or disconnect Claude Code and Codex, delete SessionBoard
 
@@ -125,7 +125,7 @@ To know each session's state, SessionBoard adds **hooks** to Claude Code and Cod
 
 1. On every session event, Claude Code and Codex hooks run `~/.claude/session-board/bin/hook.sh`, which keeps one state file per session in `~/.claude/session-board/state/`.
 2. The app reads those files every 3 seconds. Titles come from the Claude desktop app's session data, from the transcript title for terminal sessions (`/rename` or the automatic title), or from Codex's saved thread title.
-3. Background tasks are recorded when they start and removed when their completion notice appears in the transcript (Claude Code only).
+3. Claude Code background tasks are recorded when they start and removed when their completion notice appears in the transcript. For Codex, each command is recorded when it starts and removed when it finishes.
 
 Apart from checking GitHub for updates, nothing leaves your Mac — everything is stored locally.
 
@@ -141,7 +141,7 @@ Apart from checking GitHub for updates, nothing leaves your Mac — everything i
   - waiting for approval of a plan (the turn ends, so it shows as done)
   - an MCP server asking for input or sign-in
   - scheduled (automation) runs can't be told apart and are listed like other sessions
-  - terminal commands left running after the turn ends are not tracked (the background task warning is Claude Code only)
+  - fully detached processes (`cmd &`) can't be tracked to completion
 
 ## Uninstall
 

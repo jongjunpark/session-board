@@ -38,7 +38,7 @@ struct HookTarget: Equatable {
         command: boardDir + "/bin/hook.sh --agent codex",
         specs: [
             ("UserPromptSubmit", nil),
-            ("PreToolUse", "request_user_input"),
+            ("PreToolUse", "request_user_input|Bash"), // 질문 + 명령 시작 (명령이 오래 도는지 보려고)
             ("PermissionRequest", nil),
             ("PostToolUse", nil),
             ("Stop", nil),
@@ -135,11 +135,20 @@ enum Installer {
         return hooks.contains { ($0["command"] as? String) == target.command }
     }
 
+    // 우리 훅이 모든 이벤트에 "지금 정의대로"(matcher 까지) 들어가 있는지
     static func hooksInstalled(_ target: HookTarget = .claude) -> Bool {
         guard let settings = try? loadSettings(target), let hooks = settings["hooks"] as? [String: Any] else { return false }
         return target.specs.allSatisfy { spec in
-            ((hooks[spec.event] as? [Any]) ?? []).contains { groupHasOurHook($0, target) }
+            ((hooks[spec.event] as? [Any]) ?? []).contains {
+                groupHasOurHook($0, target) && ($0 as? [String: Any])?["matcher"] as? String == spec.matcher
+            }
         }
+    }
+
+    // 예전 정의로라도 연결돼 있었는지 (업데이트 안내용)
+    static func hooksPresent(_ target: HookTarget) -> Bool {
+        guard let settings = try? loadSettings(target), let hooks = settings["hooks"] as? [String: Any] else { return false }
+        return hooks.values.contains { (($0 as? [Any]) ?? []).contains { groupHasOurHook($0, target) } }
     }
 
     // 이미 있는 다른 훅은 그대로 두고, 빠진 것만 더한다
@@ -149,7 +158,17 @@ enum Installer {
         var changed = false
         for spec in target.specs {
             var groups = hooks[spec.event] as? [Any] ?? []
-            if groups.contains(where: { groupHasOurHook($0, target) }) { continue }
+            // 이미 있으면 matcher 만 지금 정의로 맞춘다 (예전 버전에서 연결한 경우)
+            if let index = groups.firstIndex(where: { groupHasOurHook($0, target) }) {
+                var group = groups[index] as? [String: Any] ?? [:]
+                if group["matcher"] as? String != spec.matcher {
+                    if let matcher = spec.matcher { group["matcher"] = matcher } else { group.removeValue(forKey: "matcher") }
+                    groups[index] = group
+                    hooks[spec.event] = groups
+                    changed = true
+                }
+                continue
+            }
             var group: [String: Any] = ["hooks": [["type": "command", "command": target.command, "timeout": 5]]]
             if let matcher = spec.matcher { group["matcher"] = matcher }
             groups.append(group)
@@ -224,18 +243,22 @@ enum Installer {
         guard !targets.isEmpty else { return }
         let names = targets.map(\.name).joined(separator: "·")
         let files = targets.map { $0.settingsPath.replacingOccurrences(of: homeDir, with: "~") }.joined(separator: ", ")
+        // 예전 버전으로 연결돼 있던 도구는 "업데이트"로 안내한다
+        let updating = targets.allSatisfy { hooksPresent($0) }
         let alert = NSAlert()
-        alert.messageText = "\(names)와 연결할까요?"
+        alert.messageText = updating ? "\(names) 연동을 업데이트할까요?" : "\(names)와 연결할까요?"
         var info = """
         세션이 시작·대기·완료될 때마다 상태를 기록하려면 훅이 필요해요. (\(files))
         이미 있는 다른 설정은 그대로 두고, 고치기 전 원본을 같은 폴더에 백업해 둬요.
         이미 돌고 있는 세션은 다음 요청부터 잡혀요.
         """
         if targets.contains(.codex) {
-            info += "\n\nCodex 는 새 훅을 직접 허용해야 실행해요. 다음에 Codex 를 열 때 훅을 검토하라는 창이 뜨면 허용해 주세요. (CLI 에서는 \"Trust all and continue\")"
+            info += hooksPresent(.codex)
+                ? "\n\n이번 업데이트로 Codex 에서 실행 중인 명령이 오래 도는지도 볼 수 있어요. 훅 정의가 바뀌어서 Codex 에서 한 번 더 허용해야 해요. (앱: 입력창의 갈고리 아이콘, CLI: \"Trust all and continue\")"
+                : "\n\nCodex 는 새 훅을 직접 허용해야 실행해요. 다음에 Codex 를 열 때 훅을 검토하라는 창이 뜨면 허용해 주세요. (CLI 에서는 \"Trust all and continue\")"
         }
         alert.informativeText = info
-        alert.addButton(withTitle: "연결")
+        alert.addButton(withTitle: updating ? "업데이트" : "연결")
         alert.addButton(withTitle: "나중에")
         NSApp.activate(ignoringOtherApps: true)
         if alert.runModal() == .alertFirstButtonReturn {

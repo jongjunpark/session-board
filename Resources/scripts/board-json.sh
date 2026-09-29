@@ -91,6 +91,12 @@ for f in "$DIR"/*.json; do
       fi
     fi
 
+    # Codex 명령: 끝 신호(PostToolUse)를 끝내 못 받은 기록은 6시간 뒤 정리한다 (창을 닫았거나 /stop 등)
+    if [ "$(jq -r '[.bg // [] | .[] | select(.kind == "command" and (now - .at) > 21600)] | length' "$f")" -gt 0 ]; then
+      tmp=$(mktemp "$DIR/.tmp.XXXXXX")
+      jq '.bg = ((.bg // []) | map(select(.kind != "command" or (now - .at) <= 21600)))' "$f" >"$tmp" && mv "$tmp" "$f"
+    fi
+
     # 백그라운드 작업: 대화 기록에 완료 알림(<task-notification>)이 온 것은 목록에서 뺀다
     if [ "$(jq '(.bg // []) | length' "$f")" -gt 0 ]; then
       # 완료가 확인된 호출 번호만 모은다
@@ -111,7 +117,8 @@ for f in "$DIR"/*.json; do
       oldest=$(jq -r '(.bg // []) | if length > 0 then (min_by(.at).at) else 0 end' "$f")
       if [ "$BG_WARN_ON" = true ] && [ "$oldest" -gt 0 ] && [ $((now - oldest)) -gt $BG_WARN_SEC ] \
         && [ "$now" -gt "$(jq -r '.bg_snooze_until // 0' "$f")" ] && [ "$(jq -r '.bg_warned // false' "$f")" != true ]; then
-        "$BOARD/bin/notify.sh" "$(jq -r .session_id "$f")" "백그라운드 작업 $(( (now - oldest) / 60 ))분째, 멈췄는지 확인해 보세요" >/dev/null 2>&1 &
+        what="백그라운드 작업"; [ "$(jq -r '.agent // ""' "$f")" = codex ] && what="명령"
+        "$BOARD/bin/notify.sh" "$(jq -r .session_id "$f")" "$what $(( (now - oldest) / 60 ))분째, 멈췄는지 확인해 보세요" "$(jq -r '.agent // "claude"' "$f")" >/dev/null 2>&1 &
         tmp=$(mktemp "$DIR/.tmp.XXXXXX")
         jq '.bg_warned = true' "$f" >"$tmp" && mv "$tmp" "$f"
       fi
@@ -186,7 +193,9 @@ jq -c --slurpfile idx "$IDX" --argjson cidx "$CIDX" --argjson now "$(date +%s)" 
        elif $bgwarned then "needs_input"
        elif $bgn > 0 and $s.state == "done" then "running"
        else $s.state end) as $state
-    | (if $bgn > 1 then "백그라운드 작업 \($bgn)개" else "백그라운드 작업" end) as $bgname
+    # Claude 는 백그라운드 작업, Codex 는 실행 중인 명령
+    | (if $src.kind == "codex" then "명령" else "백그라운드 작업" end) as $bgword
+    | (if $bgn > 1 then "\($bgword) \($bgn)개" else $bgword end) as $bgname
     | {
         session_id: $s.session_id,
         kind: $src.kind,
@@ -207,8 +216,8 @@ jq -c --slurpfile idx "$IDX" --argjson cidx "$CIDX" --argjson now "$(date +%s)" 
         bg_warn: ($bgwarned and $s.state != "needs_input"),
         updated_at: $s.updated_at,
         # 호버 때 뜨는 짧은 목록용 한 단어 표시
-        short: (if $state == "needs_input" then (if $bgwarned and $s.state != "needs_input" then "백그라운드 \($bgage | dur)" else "확인 필요" end)
-                elif $bgn > 0 and $s.state == "done" then "백그라운드 \($bgage | dur)"
+        short: (if $state == "needs_input" then (if $bgwarned and $s.state != "needs_input" then "\(if $src.kind == "codex" then "명령" else "백그라운드" end) \($bgage | dur)" else "확인 필요" end)
+                elif $bgn > 0 and $s.state == "done" then "\(if $src.kind == "codex" then "명령" else "백그라운드" end) \($bgage | dur)"
                 elif $state == "running" then (if $el < 60 then "방금" else ($el | dur) end)
                 else "\(($now - $s.updated_at) | dur) 전" end),
         label: (
