@@ -10,6 +10,7 @@
   <key>CFBundleShortVersionString</key><string>__VERSION__</string>
   <key>CFBundleVersion</key><string>__VERSION__</string>
   <key>LSUIElement</key><true/>
+  <key>SBRepository</key><string>__REPO__</string>
   <key>LSMinimumSystemVersion</key><string>15.0</string>
   <key>NSHumanReadableCopyright</key><string>MIT License</string>
 </dict>

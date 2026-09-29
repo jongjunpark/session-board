@@ -9,7 +9,11 @@ DIR="$BOARD/state"
 SESS="$HOME/Library/Application Support/Claude/claude-code-sessions"
 IDX="$BOARD/.index.json"
 STALE_SEC=600 # 진행중인데 이만큼 움직임이 없으면 경고
-BG_WARN_SEC=900 # 백그라운드 작업이 이만큼 넘게 돌면 확인 필요로 올린다 ("더 기다리기"로 같은 만큼 미룸)
+# 백그라운드 작업이 기준 시간을 넘게 돌면 확인 필요로 올린다 ("더 기다리기"로 같은 만큼 미룸).
+# 켜기/끄기와 시간은 앱 설정 창에서 정하고 config.json 에 저장된다 (없으면 켜짐·15분)
+CONFIG="$BOARD/config.json"
+BG_WARN_ON=$(jq -r 'if .bgWarnEnabled == false then "false" else "true" end' "$CONFIG" 2>/dev/null || echo true)
+BG_WARN_SEC=$(( $(jq -r '.bgWarnMinutes // 15' "$CONFIG" 2>/dev/null || echo 15) * 60 ))
 mkdir -p "$DIR"
 
 # 데스크톱 앱 세션 목록 → CLI 세션 id 색인 (앱 세션 파일이 바뀌었을 때만 다시 만든다)
@@ -58,7 +62,7 @@ for f in "$DIR"/*.json; do
       # 너무 오래 도는 작업이 있으면 알림을 한 번 보낸다
       now=$(date +%s)
       oldest=$(jq -r '(.bg // []) | if length > 0 then (min_by(.at).at) else 0 end' "$f")
-      if [ "$oldest" -gt 0 ] && [ $((now - oldest)) -gt $BG_WARN_SEC ] \
+      if [ "$BG_WARN_ON" = true ] && [ "$oldest" -gt 0 ] && [ $((now - oldest)) -gt $BG_WARN_SEC ] \
         && [ "$now" -gt "$(jq -r '.bg_snooze_until // 0' "$f")" ] && [ "$(jq -r '.bg_warned // false' "$f")" != true ]; then
         "$BOARD/bin/notify.sh" "$(jq -r .session_id "$f")" "백그라운드 작업 $(( (now - oldest) / 60 ))분째, 멈췄는지 확인해 보세요" >/dev/null 2>&1 &
         tmp=$(mktemp "$DIR/.tmp.XXXXXX")
@@ -92,7 +96,7 @@ jq -r --slurpfile idx "$IDX" --argjson now "$(date +%s)" "$FILTER_COMMON"'
       or ($src.kind == "terminal" and $s.state != "done" and ($now - $s.mtime) > 86400))
   | .path' <<<"$states" | while IFS= read -r p; do rm -f "$p"; done
 
-jq -c --slurpfile idx "$IDX" --argjson now "$(date +%s)" --argjson stale "$STALE_SEC" --argjson bgwarn "$BG_WARN_SEC" "$FILTER_COMMON"'
+jq -c --slurpfile idx "$IDX" --argjson now "$(date +%s)" --argjson stale "$STALE_SEC" --argjson bgwarn "$BG_WARN_SEC" --argjson bgon "$BG_WARN_ON" "$FILTER_COMMON"'
   def dur: if . < 60 then "방금" elif . < 3600 then "\(. / 60 | floor)분"
            else "\(. / 3600 | floor)시간 \((. % 3600) / 60 | floor)분" end;
   def rank: {needs_input: 0, running: 1, done: 2}[.state] // 3;
@@ -105,7 +109,7 @@ jq -c --slurpfile idx "$IDX" --argjson now "$(date +%s)" --argjson stale "$STALE
     | ($s | bgcount) as $bgn
     | (if $bgn > 0 then $now - ($s.bg | min_by(.at).at) else 0 end) as $bgage
     # 백그라운드 작업이 기준 시간을 넘겼고 "더 기다리기"로 미룬 시간도 지났으면 확인 필요
-    | ($bgn > 0 and $bgage > $bgwarn and $now > ($s.bg_snooze_until // 0)) as $bgwarned
+    | ($bgon and $bgn > 0 and $bgage > $bgwarn and $now > ($s.bg_snooze_until // 0)) as $bgwarned
     # 화면에 보일 상태: 확인 필요 > 오래 걸리는 백그라운드 > 답은 끝났지만 백그라운드가 도는 중 > 원래 상태
     | (if $s.state == "needs_input" then "needs_input"
        elif $bgwarned then "needs_input"

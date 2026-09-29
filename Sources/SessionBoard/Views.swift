@@ -11,6 +11,7 @@ private enum Palette {
 
 struct BoardView: View {
     @ObservedObject var model: BoardModel
+    @ObservedObject var updater = Updater.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -32,6 +33,7 @@ struct BoardView: View {
             // 개수·접기 버튼은 늘 오른쪽 끝에 붙인다 (접고 펴고 호버해도 제자리).
             // 접힌 알약은 폭이 정해져 있지 않아서 빈칸을 넣으면 화면 끝까지 늘어나므로 뺀다
             if !model.collapsed || model.peek { Spacer(minLength: 0) }
+            updateChip
             countChip("●", model.needs.count, Palette.needs)
             countChip("⟳", model.running.count, Palette.running)
             countChip("✓", model.done.count, Palette.done)
@@ -62,16 +64,31 @@ struct BoardView: View {
             }
             Button("새로고침") { model.refresh() }
             Divider()
-            Toggle("로그인 시 실행", isOn: Binding(
-                get: { Installer.launchAtLogin },
-                set: { Installer.setLaunchAtLogin($0) }
-            ))
-            if !Installer.hooksInstalled() {
-                Button("Claude Code 훅 추가…") { Installer.askToInstallHooks() }
-            }
-            Button("세션 보드 제거…") { Installer.uninstallEverything() }
+            Button("설정…") { SettingsWindow.show() }
             Divider()
             Button("세션 보드 종료") { NSApp.terminate(nil) }
+        }
+    }
+
+    // 새 버전이 있으면 개수 옆에 띄운다. 누르면 업데이트할지 묻는다
+    @ViewBuilder
+    private var updateChip: some View {
+        if let release = updater.available {
+            Button {
+                updater.confirmInstall(release)
+            } label: {
+                Text(model.collapsed && !model.peek ? "↑" : "새 버전 \(release.version)")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Palette.running)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(Palette.running.opacity(0.16)))
+                    .overlay(Capsule().strokeBorder(Palette.running.opacity(0.28), lineWidth: 0.5))
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .help("새 버전 \(release.version) 으로 업데이트")
+            .accessibilityLabel("새 버전 \(release.version) 으로 업데이트")
         }
     }
 
@@ -93,7 +110,7 @@ struct BoardView: View {
         if model.items.isEmpty {
             Text(Installer.hooksInstalled()
                  ? "지금 도는 세션이 없어요"
-                 : "Claude Code 훅이 없어서 세션을 볼 수 없어요.\n위쪽 줄을 오른쪽 클릭 → 훅 추가")
+                 : "Claude Code 훅이 없어서 세션을 볼 수 없어요.\n오른쪽 클릭 → 설정에서 훅을 추가해 주세요")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .padding(12)
@@ -297,7 +314,7 @@ struct BoardRow: View {
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                .help("정상으로 도는 중이면 15분 뒤에 다시 알려요")
+                .help("정상으로 도는 중이면 \(BoardConfig.label(BoardConfig.shared.bgWarnMinutes)) 뒤에 다시 알려요")
                 .accessibilityLabel("더 기다리기")
             }
         }
@@ -314,7 +331,7 @@ struct BoardRow: View {
         .contextMenu {
             Button("세션 열기") { model.open(item) }
             if item.bg_warn {
-                Button("더 기다리기 (15분 뒤 다시 알림)") { model.snooze(item) }
+                Button("더 기다리기 (\(BoardConfig.label(BoardConfig.shared.bgWarnMinutes)) 뒤 다시 알림)") { model.snooze(item) }
             }
             Button(item.state == "done" ? "확인 완료" : "목록에서 지우기") { model.check(item) }
         }

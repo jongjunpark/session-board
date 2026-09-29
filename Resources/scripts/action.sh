@@ -14,7 +14,7 @@ case "${1:-}" in
   snooze)
     f="$DIR/$2.json"
     [ -f "$f" ] || exit 0
-    wait=$(sed -n 's/^BG_WARN_SEC=\([0-9]*\).*/\1/p' "$HOME/.claude/session-board/bin/board-json.sh")
+    wait=$(( $(jq -r '.bgWarnMinutes // 15' "$HOME/.claude/session-board/config.json" 2>/dev/null || echo 15) * 60 )) # 설정 창의 알림 기준 시간만큼 미룬다
     tmp=$(mktemp "$DIR/.tmp.XXXXXX")
     jq --argjson until "$(( $(date +%s) + ${wait:-900} ))" '.bg_snooze_until = $until | .bg_warned = false' "$f" >"$tmp" && mv "$tmp" "$f"
     ;;

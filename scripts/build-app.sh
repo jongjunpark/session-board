@@ -20,7 +20,8 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/${APP_NAME}"
 cp -R Resources/scripts "$APP/Contents/Resources/scripts"
 chmod 755 "$APP/Contents/Resources/scripts/"*.sh
-sed -e "s/__BUNDLE_ID__/${BUNDLE_ID}/" -e "s/__VERSION__/${VERSION}/g" Resources/Info.plist > "$APP/Contents/Info.plist"
+sed -e "s/__BUNDLE_ID__/${BUNDLE_ID}/" -e "s/__VERSION__/${VERSION}/g" -e "s|__REPO__|${OWNER}/session-board|" \
+  Resources/Info.plist > "$APP/Contents/Info.plist"
 [ -f Resources/AppIcon.icns ] && cp Resources/AppIcon.icns "$APP/Contents/Resources/" || true
 
 echo "▸ 자체 서명"

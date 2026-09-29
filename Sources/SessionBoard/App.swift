@@ -53,10 +53,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var timer: Timer?
     private var fitGeneration = 0
     private var isResizing = false
+    private var menuBar: MenuBarController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         Installer.prepareOnLaunch()
+        BoardConfig.shared.save() // 스크립트가 읽을 설정 파일을 늘 만들어 둔다
 
         let panel = BoardPanel(
             contentRect: NSRect(x: 0, y: 0, width: 300, height: 60),
@@ -113,6 +115,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         model.onRequest = { [weak self] collapsed, peek, items in
             self?.transition(collapsed: collapsed, peek: peek, items: items)
+        }
+        // 새 버전 표시가 생기거나 없어지면 창 크기를 다시 맞춘다
+        Updater.shared.onAvailabilityChange = { [weak self] in self?.model.request() }
+        Updater.shared.scheduleChecks()
+
+        // 메뉴 막대 표시
+        let menuBar = MenuBarController(model: model)
+        menuBar.setEnabled(MenuBarController.enabled)
+        MenuBarController.current = menuBar
+        self.menuBar = menuBar
+
+        // 떠 있는 창 보이기/숨기기 (메뉴 막대에서). 숨긴 상태는 기억한다
+        if UserDefaults.standard.bool(forKey: "boardHidden") { panel.orderOut(nil) }
+        NotificationCenter.default.addObserver(forName: .toggleBoardWindow, object: nil, queue: .main) { [weak panel] _ in
+            MainActor.assumeIsolated {
+                guard let panel else { return }
+                let hide = panel.isVisible
+                if hide { panel.orderOut(nil) } else { panel.orderFrontRegardless() }
+                UserDefaults.standard.set(hide, forKey: "boardHidden")
+            }
         }
         model.refresh()
         timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
@@ -192,6 +214,20 @@ enum SessionBoardMain {
         // 창 없이 훅만 넣고 빼는 명령 (Homebrew 제거·시험용)
         //   SessionBoard --install-hooks | --uninstall-hooks
         let args = CommandLine.arguments
+        // 창 없이 새 버전을 확인해 있으면 바로 업데이트하고 끝낸다
+        if args.contains("--self-update") {
+            Task { @MainActor in
+                await Updater.shared.check(userInitiated: false)
+                guard let release = Updater.shared.available else {
+                    print("최신 버전이에요 (\(Updater.shared.currentVersion))")
+                    exit(0)
+                }
+                print("\(Updater.shared.currentVersion) → \(release.version) 업데이트")
+                await Updater.shared.install(release)
+                exit(1) // install 이 끝내지 못했으면 실패
+            }
+            dispatchMain()
+        }
         if args.contains("--install-hooks") || args.contains("--uninstall-hooks") {
             let ok = MainActor.assumeIsolated { () -> Bool in
                 do {
