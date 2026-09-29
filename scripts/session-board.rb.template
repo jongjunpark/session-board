@@ -1,0 +1,31 @@
+cask "session-board" do
+  version "__VERSION__"
+  sha256 "__SHA256__"
+
+  url "https://github.com/__OWNER__/session-board/releases/download/v#{version}/SessionBoard.zip"
+  name "SessionBoard"
+  desc "Floating board of running, waiting and finished Claude Code sessions"
+  homepage "https://github.com/__OWNER__/session-board"
+
+  depends_on macos: ">= :sequoia"
+
+  app "SessionBoard.app"
+
+  # 자체 서명 앱이라 격리 표시를 떼어 첫 실행 때 보안 경고가 뜨지 않게 한다
+  postflight do
+    system_command "/usr/bin/xattr",
+                   args: ["-dr", "com.apple.quarantine", "#{appdir}/SessionBoard.app"]
+  end
+
+  uninstall quit: "__BUNDLE_ID__"
+
+  # 완전 제거 때만 Claude Code 설정에서 훅을 뺀다 (업데이트 때는 빼지 않도록 uninstall 이 아니라 zap 에 둔다)
+  zap script: {
+        executable: "#{Dir.home}/.claude/session-board/bin/uninstall-hooks.sh",
+        must_succeed: false,
+      },
+      trash: [
+        "~/.claude/session-board",
+        "~/Library/Preferences/__BUNDLE_ID__.plist",
+      ]
+end
