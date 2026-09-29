@@ -10,6 +10,9 @@ TAG="v${VERSION}"
 ZIP="build/${APP_NAME}.zip"
 
 [ -z "$(git status --porcelain)" ] || { echo "커밋하지 않은 변경이 있어요"; exit 1; }
+# 올리는 계정 확인 (gh 에 여러 계정이 로그인돼 있을 때 다른 계정으로 올라가지 않게)
+ACTIVE=$(gh api user --jq .login)
+[ "$ACTIVE" = "$OWNER" ] || { echo "gh 활성 계정이 $ACTIVE 예요. 먼저: gh auth switch --user $OWNER"; exit 1; }
 git rev-parse "$TAG" >/dev/null 2>&1 && { echo "$TAG 태그가 이미 있어요"; exit 1; }
 
 VERSION="$VERSION" ./scripts/build-app.sh
