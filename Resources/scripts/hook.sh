@@ -90,7 +90,12 @@ codex_cmd_end() {
 }
 
 add_bg() {
-  [ "$(jq -r '.tool_input.run_in_background // false' <<<"$input")" = "true" ] || return 0
+  # 호출 때 백그라운드로 요청했거나(run_in_background), 요청이 없어도 Claude Code 가 알아서 백그라운드로 돌린 경우
+  # (에이전트 결과가 isAsync / async_launched, 명령 결과에 backgroundTaskId) 모두 백그라운드 작업으로 기록한다
+  [ "$(jq -r '(.tool_input.run_in_background == true)
+      or ((.tool_response | type) == "object"
+          and ((.tool_response.isAsync == true) or (.tool_response.status == "async_launched")
+               or ((.tool_response.backgroundTaskId // "") != "")))' <<<"$input")" = "true" ] || return 0
   [ -f "$file" ] || return 0
   local tmp
   tmp=$(mktemp "$DIR/.tmp.XXXXXX")
