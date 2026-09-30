@@ -109,6 +109,10 @@ for f in "$DIR"/*.json; do
         # 진짜 완료 알림은 작업 번호 바로 뒤에 도구 호출 번호가 붙어 나온다 (대화 중에 번호만 언급된 것과 구분)
         if [ -n "$tu" ] && [ -n "$ti" ] \
           && grep -qF "<task-id>${ti}</task-id>\\n<tool-use-id>${tu}</tool-use-id>" "$tr"; then echo "$tu"; fi
+        # Codex 명령: 결과를 먼저 돌려받고 계속 돌던 명령은 아무도 다시 확인하지 않고 끝나면 PostToolUse 가 오지 않는다.
+        # 대신 끝날 때 대화 기록에 같은 번호로 CommandExecution 완료(item_completed)가 남는다
+        if [ -n "$tu" ] && [ -z "$ti" ] \
+          && LC_ALL=C /usr/bin/grep -F "{\"type\":\"CommandExecution\",\"id\":\"${tu}\"" "$tr" | LC_ALL=C /usr/bin/grep -qF '"type":"item_completed"'; then echo "$tu"; fi
       done | jq -Rsc 'split("\n") | map(select(. != ""))')
       # 그 번호만 뺀다. 목록을 통째로 덮어쓰면 그사이 훅이 새로 넣은 작업이 사라진다
       if [ "$finished" != "[]" ]; then
