@@ -9,7 +9,8 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 BOARD="$HOME/.claude/session-board"
 DIR="$BOARD/state"
 SESS="$HOME/Library/Application Support/Claude/claude-code-sessions"
-IDX="$BOARD/.index.json"
+IDX="$BOARD/.index-v2.json" # v2: 앱 세션의 "지금 번호"(current)를 함께 담는다
+rm -f "$BOARD/.index.json" # 예전 형식 캐시
 STALE_SEC=600 # 진행중인데 이만큼 움직임이 없으면 경고
 # 백그라운드 작업이 기준 시간을 넘게 돌면 확인 필요로 올린다 ("더 기다리기"로 같은 만큼 미룸).
 # 켜기/끄기와 시간은 앱 설정 창에서 정하고 config.json 에 저장된다 (없으면 켜짐·15분)
@@ -17,13 +18,13 @@ CONFIG="$BOARD/config.json"
 BG_WARN_ON=$(jq -r 'if .bgWarnEnabled == false then "false" else "true" end' "$CONFIG" 2>/dev/null || echo true)
 BG_WARN_SEC=$(( $(jq -r '.bgWarnMinutes // 15' "$CONFIG" 2>/dev/null || echo 15) * 60 ))
 mkdir -p "$DIR" && chmod 700 "$BOARD" "$DIR" 2>/dev/null
-chmod 600 "$BOARD"/*.json "$BOARD"/.index.json "$BOARD"/update.log 2>/dev/null # 예전 버전이 만든 파일도
+chmod 600 "$BOARD"/*.json "$BOARD"/.index*.json "$BOARD"/update.log 2>/dev/null # 예전 버전이 만든 파일도
 
 # 데스크톱 앱 세션 목록 → CLI 세션 id 색인 (앱 세션 파일이 바뀌었을 때만 다시 만든다)
 if [ ! -f "$IDX" ] || [ -n "$(find "$SESS" -name 'local_*.json' -newer "$IDX" -print -quit 2>/dev/null)" ]; then
   find "$SESS" -name 'local_*.json' -print0 2>/dev/null \
     | xargs -0 jq -c '{id: .sessionId, title: (.title // ""), scheduled: has("scheduledTaskId"),
-        archived: (.isArchived // false), cli: ([.cliSessionId] + (.priorCliSessionIds // []))}' 2>/dev/null \
+        archived: (.isArchived // false), current: .cliSessionId, cli: ([.cliSessionId] + (.priorCliSessionIds // []))}' 2>/dev/null \
     | jq -s 'map(. as $s | .cli[] | {key: ., value: ($s | del(.cli))}) | from_entries' >"$IDX.tmp.$$" \
     && mv "$IDX.tmp.$$" "$IDX"
 fi
@@ -154,7 +155,10 @@ FILTER_COMMON='
   def source($idx; $cidx): . as $s
     | if ($s.agent // "claude") == "codex" then {kind: "codex", m: $cidx[$s.session_id]}
       else ($idx[$s.session_id]) as $m
-        | if $m != null then {kind: "app", m: $m}
+        # 앱은 같은 세션이라도 이어서 열거나 길어지면 내부 번호를 새로 바꾼다.
+        # 예전 번호의 기록은 끝 신호 없이 남으므로 "지금 번호"가 아니면 지난 기록으로 본다
+        | if $m != null and ($m.current // $s.session_id) != $s.session_id then {kind: "superseded", m: $m}
+          elif $m != null then {kind: "app", m: $m}
           elif ($s | terminal) then {kind: "terminal", m: null}
           else null end
       end;
@@ -174,6 +178,7 @@ jq -r --slurpfile idx "$IDX" --argjson cidx "$CIDX" --argjson now "$(date +%s)" 
       ($src == null and ($now - $s.updated_at) > 86400)
       or ($src.kind == "app" and (($src.m.archived // false) or ($src.m.scheduled // false)))
       or codexHidden($src)
+      or $src.kind == "superseded"
       or (($src.kind == "terminal" or $src.kind == "codex") and $s.state != "done" and ($now - $s.mtime) > 86400))
   | .path' <<<"$states" | while IFS= read -r p; do rm -f "$p"; done
 
@@ -184,7 +189,7 @@ jq -c --slurpfile idx "$IDX" --argjson cidx "$CIDX" --argjson now "$(date +%s)" 
   def rank: {needs_input: 0, running: 1, done: 2}[.state] // 3;
 
   [ .[] | . as $s | ($s | source($idx[0]; $cidx)) as $src
-    | select($src != null)
+    | select($src != null and $src.kind != "superseded")
     | select($src.kind != "app" or (($src.m.archived | not) and ($src.m.scheduled | not)))
     | select(codexHidden($src) | not)
     | ($now - $s.started_at) as $el | ($now - $s.mtime) as $idle
