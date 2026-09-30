@@ -59,6 +59,11 @@ struct SettingsView: View {
                         }
                     }
                 }
+                if let url = Updater.repositoryURL {
+                    LabeledContent("GitHub") {
+                        Link(url.absoluteString.replacingOccurrences(of: "https://", with: ""), destination: url)
+                    }
+                }
             }
 
             Section {

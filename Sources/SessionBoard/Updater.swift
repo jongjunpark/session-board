@@ -35,6 +35,11 @@ final class Updater: ObservableObject {
     var onAvailabilityChange: (() -> Void)?
 
     let currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
+    // 설정 창의 GitHub 링크 (Info.plist 의 SBRepository, 예: jongjunpark/session-board)
+    nonisolated static var repositoryURL: URL? {
+        guard let repo = Bundle.main.object(forInfoDictionaryKey: "SBRepository") as? String, !repo.isEmpty else { return nil }
+        return URL(string: "https://github.com/\(repo)")
+    }
     private let repository = Bundle.main.object(forInfoDictionaryKey: "SBRepository") as? String ?? ""
     private var timer: Timer?
 
