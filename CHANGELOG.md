@@ -1,5 +1,13 @@
 # 변경 기록
 
+## v0.3.4
+
+### 새 기능
+- 설정 → 업데이트에 **GitHub 저장소 링크**가 생겼어요.
+
+### 문서
+- [Codex 훅 허용하기](https://github.com/jongjunpark/session-board/blob/main/docs/codex-hooks.md): Codex 앱(갈고리 아이콘 → 모두 허용)과 CLI(Trust all and continue)에서 훅을 허용하는 방법을 스크린샷으로 정리했어요.
+
 ## v0.3.3
 
 ### 새 기능
