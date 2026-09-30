@@ -90,21 +90,35 @@ codex_cmd_end() {
 }
 
 add_bg() {
-  # 호출 때 백그라운드로 요청했거나(run_in_background), 요청이 없어도 Claude Code 가 알아서 백그라운드로 돌린 경우
-  # (에이전트 결과가 isAsync / async_launched, 명령 결과에 backgroundTaskId) 모두 백그라운드 작업으로 기록한다
-  # Monitor 는 늘 뒤에서 지켜보다 끝나면 알린다 (결과에 taskId, 끝나면 같은 번호로 완료 알림)
-  [ "$(jq -r '(.tool_input.run_in_background == true)
-      or (.tool_name == "Monitor" and ((.tool_response.taskId? // "") != ""))
-      or ((.tool_response | type) == "object"
-          and ((.tool_response.isAsync == true) or (.tool_response.status == "async_launched")
-               or ((.tool_response.backgroundTaskId // "") != "")))' <<<"$input")" = "true" ] || return 0
+  # 뒤에서 도는 작업은 끝나면 대화 기록에 <task-id>작업 번호</task-id> + <tool-use-id>호출 번호</tool-use-id> 완료 알림이 온다.
+  # 그 작업 번호를 돌려주는 호출을 도구 이름과 상관없이 모두 백그라운드 작업으로 기록한다 (지난 60일 기록으로 확인한 모양):
+  #   명령(Bash, run_in_background 이거나 시간 초과로 넘어간 것) → backgroundTaskId
+  #   에이전트(요청했거나 알아서 넘어간 것) → isAsync / status "async_launched" + agentId
+  #   Monitor·Workflow 등 → taskId,  멈춘 에이전트를 SendMessage 로 다시 깨움 → resumedAgentId
+  local task
+  task=$(jq -r '.tool_response as $r
+    | if ($r | type) != "object" then ""
+      elif ($r.backgroundTaskId // "") != "" then $r.backgroundTaskId
+      elif ($r.taskId // "") != "" then $r.taskId
+      elif ($r.resumedAgentId // "") != "" then $r.resumedAgentId
+      elif ($r.isAsync == true or $r.status == "async_launched") and ($r.agentId // "") != "" then $r.agentId
+      else "" end
+    # 구조화된 값이 없을 때는 결과 문구에서 번호를 읽는다
+    | if . != "" then .
+      else ($r | tostring) as $t
+        | (($t | capture("Async agent launched[^\n]*?agentId: (?<id>[A-Za-z0-9]+)")? // null)
+           // ($t | capture("[Rr]unning in background with ID: (?<id>[A-Za-z0-9]+)")? // null)
+           // ($t | capture("moved to the background \\(ID: (?<id>[A-Za-z0-9]+)")? // null)
+           // {id: ""}).id
+      end' <<<"$input")
+  [ -n "$task" ] || return 0
   [ -f "$file" ] || return 0
   local tmp
   tmp=$(mktemp "$DIR/.tmp.XXXXXX")
-  jq --argjson in "$input" --argjson now "$(date +%s)" '
+  jq --argjson in "$input" --arg task "$task" --argjson now "$(date +%s)" '
     .bg = ((.bg // []) + [{
       tool_use_id: ($in.tool_use_id // ""),
-      task_id: ($in.tool_response.backgroundTaskId // $in.tool_response.agentId // $in.tool_response.taskId // ""),
+      task_id: $task,
       what: (($in.tool_input.description // $in.tool_input.command // $in.tool_name // "") | tostring | .[0:60]),
       at: $now
     }])' "$file" >"$tmp" && mv "$tmp" "$file"

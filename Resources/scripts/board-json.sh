@@ -190,6 +190,8 @@ jq -c --slurpfile idx "$IDX" --argjson cidx "$CIDX" --argjson now "$(date +%s)" 
   # 큰 단위 하나만: 방금 · N분 · N시간 · N일
   def dur: if . < 60 then "방금" elif . < 3600 then "\(. / 60 | floor)분"
            elif . < 86400 then "\(. / 3600 | floor)시간" else "\(. / 86400 | floor)일" end;
+  # 얼마째 돌고 있는지: 1분이 안 되면 "방금 시작" ("방금째" 가 되지 않게)
+  def since: if . < 60 then "방금 시작" else "\(dur)째" end;
   def rank: {needs_input: 0, running: 1, done: 2}[.state] // 3;
 
   [ .[] | . as $s | ($s | source($idx[0]; $cidx)) as $src
@@ -245,10 +247,10 @@ jq -c --slurpfile idx "$IDX" --argjson cidx "$CIDX" --argjson now "$(date +%s)" 
           # 어느 도구인지는 화면이 제목 앞 기호로 보여 준다 (agent). 터미널 세션만 폴더를 붙인다
           (if $src.kind == "terminal" or $codexTerminal then "터미널 · \($folder) · " else "" end)
           + (if $s.state == "needs_input" then ($s.reason // "확인이 필요해요")
-             elif $bgwarned then "\($bgname) \($bgage | dur)째 · 멈췄는지 확인해 보세요"
-             elif $bgn > 0 and $s.state == "done" then "\($bgname) \($bgage | dur)째"
+             elif $bgwarned then "\($bgname) \($bgage | since) · 멈췄는지 확인해 보세요"
+             elif $bgn > 0 and $s.state == "done" then "\($bgname) \($bgage | since)"
              elif $state == "running" then
-               (if $el < 60 then "방금 시작" else "\($el | dur)째" end)
+               ($el | since)
                + (if $bgn > 0 then " · \($bgname)" else "" end)
                + (if $bgn == 0 and $idle > $stale then " · \($idle | dur)째 소식 없음" else "" end)
              else "\(($now - $s.updated_at) | dur) 전 끝남" + (if ($s.reason // "") != "" then " (\($s.reason))" else "" end)
