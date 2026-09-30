@@ -92,7 +92,9 @@ codex_cmd_end() {
 add_bg() {
   # 호출 때 백그라운드로 요청했거나(run_in_background), 요청이 없어도 Claude Code 가 알아서 백그라운드로 돌린 경우
   # (에이전트 결과가 isAsync / async_launched, 명령 결과에 backgroundTaskId) 모두 백그라운드 작업으로 기록한다
+  # Monitor 는 늘 뒤에서 지켜보다 끝나면 알린다 (결과에 taskId, 끝나면 같은 번호로 완료 알림)
   [ "$(jq -r '(.tool_input.run_in_background == true)
+      or (.tool_name == "Monitor" and ((.tool_response.taskId? // "") != ""))
       or ((.tool_response | type) == "object"
           and ((.tool_response.isAsync == true) or (.tool_response.status == "async_launched")
                or ((.tool_response.backgroundTaskId // "") != "")))' <<<"$input")" = "true" ] || return 0
