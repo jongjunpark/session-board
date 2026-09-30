@@ -108,6 +108,7 @@ SessionBoard 는 세션 상태를 알기 위해 Claude Code 와 Codex 에 **훅*
 
 **Codex** 는 보안을 위해 **새로 생기거나 바뀐 훅을 사용자가 직접 허용해야** 실행해요. 허용하지 않은 훅은 조용히 건너뛰어서, 허용 전에는 Codex 세션이 목록에 나타나지 않아요.
 
+- 화면으로 보는 방법은 [Codex 훅 허용하기](docs/codex-hooks.md)에 정리했어요.
 - **Codex 앱**: 입력창 오른쪽의 **갈고리 아이콘(노란 점이 붙어 있어요)** 을 눌러 SessionBoard 훅을 허용해요.
 - **Codex CLI**: 시작할 때 뜨는 "Review hooks" 창에서 **Trust all and continue** 를 고르거나, `/hooks` 로 검토해 허용해요.
 - **한 번만 허용하면 앱과 CLI 모두에 적용돼요.** 허용 기록은 `~/.codex/config.toml` 의 `[hooks.state]` 에 저장돼요.

@@ -110,6 +110,7 @@ To know each session's state, SessionBoard adds **hooks** to Claude Code and Cod
 
 **Codex**, for security, runs **new or changed hooks only after you trust them**. Untrusted hooks are skipped silently, so Codex sessions don't appear until you approve.
 
+- Step-by-step with screenshots: [Approving Codex hooks](docs/codex-hooks.en.md).
 - **Codex app:** click the **hook icon (with a yellow dot)** on the right of the composer and approve the SessionBoard hooks.
 - **Codex CLI:** choose **Trust all and continue** in the "Review hooks" prompt at startup, or review them with `/hooks`.
 - **Approving once covers both the app and the CLI.** Trust is stored in `[hooks.state]` in `~/.codex/config.toml`.
