@@ -28,7 +28,7 @@ struct BoardView: View {
     private var header: some View {
         HStack(spacing: 8) {
             if !model.collapsed {
-                Text("SessionBoard").font(.system(size: 12, weight: .semibold))
+                Text("Session Board").font(.system(size: 12, weight: .semibold))
             }
             // 개수·접기 버튼은 늘 오른쪽 끝에 붙인다 (접고 펴고 호버해도 제자리).
             // 접힌 알약은 폭이 정해져 있지 않아서 빈칸을 넣으면 화면 끝까지 늘어나므로 뺀다
