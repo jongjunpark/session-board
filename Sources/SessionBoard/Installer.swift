@@ -6,6 +6,24 @@ import ServiceManagement
 let homeDir = ProcessInfo.processInfo.environment["SESSION_BOARD_HOME"] ?? NSHomeDirectory()
 let boardDir = homeDir + "/.claude/session-board"
 
+// 훅이 부르는 스크립트는 앱 안(Contents/Resources/scripts)에 둔다.
+// ~/.claude 처럼 에이전트의 작업 폴더 안에 들 수 있는 곳에 두면, 샌드박스 안의 에이전트가 스크립트를 고쳐
+// 다음 훅 때 샌드박스 밖에서 실행되게 할 수 있다. (Codex 는 스크립트 내용이 바뀌어도 다시 검토하지 않는다)
+let scriptsDir = (Bundle.main.resourcePath ?? "") + "/scripts"
+// v0.3.4 까지 스크립트를 두던 곳. 지금은 Homebrew 완전 제거용 uninstall-hooks.sh 만 둔다
+let legacyBinDir = boardDir + "/bin"
+
+// 훅 명령에 넣을 경로 (공백 등이 있어도 셸이 한 덩어리로 읽게)
+func shellQuoted(_ path: String) -> String {
+    "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+}
+
+// 어느 위치든 SessionBoard 훅 명령인지 (옛 위치 · 다른 곳에 둔 앱 포함)
+func isSessionBoardHookCommand(_ command: String) -> Bool {
+    command.contains("/.claude/session-board/bin/hook.sh")
+        || command.contains("SessionBoard.app/Contents/Resources/scripts/hook.sh")
+}
+
 // 훅을 넣을 곳: Claude Code 와 Codex 는 설정 파일 위치·명령·이벤트만 다르고 형식은 같다
 struct HookTarget: Equatable {
     let name: String
@@ -18,7 +36,7 @@ struct HookTarget: Equatable {
     static let claude = HookTarget(
         name: "Claude Code",
         settingsPath: homeDir + "/.claude/settings.json",
-        command: boardDir + "/bin/hook.sh",
+        command: shellQuoted(scriptsDir + "/hook.sh"),
         specs: [
             ("UserPromptSubmit", ""),
             ("PreToolUse", "AskUserQuestion|ExitPlanMode"),
@@ -35,7 +53,7 @@ struct HookTarget: Equatable {
     static let codex = HookTarget(
         name: "Codex",
         settingsPath: homeDir + "/.codex/hooks.json",
-        command: boardDir + "/bin/hook.sh --agent codex",
+        command: shellQuoted(scriptsDir + "/hook.sh") + " --agent codex",
         specs: [
             ("UserPromptSubmit", nil),
             ("PreToolUse", "request_user_input|Bash"), // 질문 + 명령 시작 (명령이 오래 도는지 보려고)
@@ -54,8 +72,6 @@ struct HookTarget: Equatable {
 
 @MainActor
 enum Installer {
-    static let binDir = boardDir + "/bin"
-    static let hookCommand = binDir + "/hook.sh"
 
     enum InstallError: LocalizedError {
         case unreadableSettings(String, String)
@@ -68,19 +84,35 @@ enum Installer {
         }
     }
 
-    // MARK: 스크립트
+    // MARK: 기록 폴더 · 옛 위치 스크립트
 
-    // 앱에 들어 있는 스크립트를 ~/.claude/session-board/bin 에 깐다. 앱을 업데이트하면 실행할 때마다 새 버전으로 바뀐다.
-    static func installScripts() throws {
-        guard let source = Bundle.main.resourceURL?.appendingPathComponent("scripts") else { return }
+    // 기록 폴더를 나만 읽게 만들고, 옛 위치(~/.claude/session-board/bin)를 정리한다.
+    //  - 옛 위치를 가리키는 훅이 아직 있으면(업데이트를 미룬 경우) 그 훅이 깨지지 않게 스크립트를 계속 둔다
+    //  - 없으면 Homebrew 완전 제거용 uninstall-hooks.sh 만 남긴다
+    static func syncLegacyScripts() throws {
         let fm = FileManager.default
-        try fm.createDirectory(atPath: binDir, withIntermediateDirectories: true)
-        try fm.createDirectory(atPath: boardDir + "/state", withIntermediateDirectories: true)
-        for name in try fm.contentsOfDirectory(atPath: source.path) where name.hasSuffix(".sh") {
-            let target = binDir + "/" + name
+        for dir in [boardDir, boardDir + "/state", legacyBinDir] {
+            try fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
+            try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir)
+        }
+        let legacyInUse = [HookTarget.claude, HookTarget.codex].contains { legacyHooksPresent($0) }
+        for name in try fm.contentsOfDirectory(atPath: scriptsDir) where name.hasSuffix(".sh") {
+            let target = legacyBinDir + "/" + name
             if fm.fileExists(atPath: target) { try fm.removeItem(atPath: target) }
-            try fm.copyItem(atPath: source.appendingPathComponent(name).path, toPath: target)
-            try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: target)
+            guard legacyInUse || name == "uninstall-hooks.sh" else { continue }
+            try fm.copyItem(atPath: scriptsDir + "/" + name, toPath: target)
+            try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: target)
+        }
+    }
+
+    private static func legacyHooksPresent(_ target: HookTarget) -> Bool {
+        guard let settings = try? loadSettings(target), let hooks = settings["hooks"] as? [String: Any] else { return false }
+        return hooks.values.contains { value in
+            ((value as? [Any]) ?? []).contains { group in
+                (((group as? [String: Any])?["hooks"] as? [[String: Any]]) ?? []).contains {
+                    ($0["command"] as? String)?.contains(legacyBinDir + "/hook.sh") == true
+                }
+            }
         }
     }
 
@@ -124,15 +156,24 @@ enum Installer {
             while fm.fileExists(atPath: backup) { n += 1; backup = base + "-\(n)" } // 같은 초에 두 번 고쳐도 겹치지 않게
             try fm.copyItem(atPath: path, toPath: backup)
         }
+        // 원래 파일 권한을 기억했다가 그대로 돌려놓는다 (새로 쓰면 남도 읽을 수 있는 644 가 되기 쉽다)
+        let permissions = (try? fm.attributesOfItem(atPath: path))?[.posixPermissions] as? NSNumber
         let data = try JSONSerialization.data(
             withJSONObject: settings, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         )
         try data.write(to: URL(fileURLWithPath: path), options: .atomic)
+        try fm.setAttributes([.posixPermissions: permissions ?? NSNumber(value: 0o600)], ofItemAtPath: path)
     }
 
     private static func groupHasOurHook(_ group: Any, _ target: HookTarget) -> Bool {
         guard let hooks = (group as? [String: Any])?["hooks"] as? [[String: Any]] else { return false }
         return hooks.contains { ($0["command"] as? String) == target.command }
+    }
+
+    // 위치와 상관없이 SessionBoard 훅이 든 묶음인지
+    private static func groupHasAnySessionBoardHook(_ group: Any) -> Bool {
+        guard let hooks = (group as? [String: Any])?["hooks"] as? [[String: Any]] else { return false }
+        return hooks.contains { isSessionBoardHookCommand(($0["command"] as? String) ?? "") }
     }
 
     // 우리 훅이 모든 이벤트에 "지금 정의대로"(matcher 까지) 들어가 있는지
@@ -148,7 +189,7 @@ enum Installer {
     // 예전 정의로라도 연결돼 있었는지 (업데이트 안내용)
     static func hooksPresent(_ target: HookTarget) -> Bool {
         guard let settings = try? loadSettings(target), let hooks = settings["hooks"] as? [String: Any] else { return false }
-        return hooks.values.contains { (($0 as? [Any]) ?? []).contains { groupHasOurHook($0, target) } }
+        return hooks.values.contains { (($0 as? [Any]) ?? []).contains(where: groupHasAnySessionBoardHook) }
     }
 
     // 이미 있는 다른 훅은 그대로 두고, 빠진 것만 더한다
@@ -156,6 +197,14 @@ enum Installer {
         var settings = try loadSettings(target)
         var hooks = settings["hooks"] as? [String: Any] ?? [:]
         var changed = false
+        // 다른 위치를 가리키는 SessionBoard 훅(옛 위치, 옮긴 앱)은 빼고 지금 위치로 새로 넣는다
+        for (event, value) in hooks {
+            guard let groups = value as? [Any] else { continue }
+            let kept = groups.filter { !groupHasAnySessionBoardHook($0) || groupHasOurHook($0, target) }
+            guard kept.count != groups.count else { continue }
+            changed = true
+            if kept.isEmpty { hooks.removeValue(forKey: event) } else { hooks[event] = kept }
+        }
         for spec in target.specs {
             var groups = hooks[spec.event] as? [Any] ?? []
             // 이미 있으면 matcher 만 지금 정의로 맞춘다 (예전 버전에서 연결한 경우)
@@ -180,14 +229,14 @@ enum Installer {
         try saveSettings(settings, target)
     }
 
-    // 세션 보드 훅만 뺀다
+    // SessionBoard 훅만 뺀다 (어느 위치를 가리키든)
     static func uninstallHooks(_ target: HookTarget = .claude) throws {
         var settings = try loadSettings(target)
         guard var hooks = settings["hooks"] as? [String: Any] else { return }
         var changed = false
         for (event, value) in hooks {
             guard let groups = value as? [Any] else { continue }
-            let kept = groups.filter { !groupHasOurHook($0, target) }
+            let kept = groups.filter { !groupHasAnySessionBoardHook($0) }
             guard kept.count != groups.count else { continue }
             changed = true
             if kept.isEmpty { hooks.removeValue(forKey: event) } else { hooks[event] = kept }
@@ -219,7 +268,7 @@ enum Installer {
             alert("jq 가 필요해요", "macOS 15 이상에는 기본으로 들어 있어요. 그 전 버전이면 터미널에서 `brew install jq` 로 설치한 뒤 다시 열어 주세요.")
         }
         do {
-            try installScripts()
+            try syncLegacyScripts()
         } catch {
             alert("스크립트를 설치하지 못했어요", error.localizedDescription)
             return
@@ -269,6 +318,7 @@ enum Installer {
                     Installer.alert("\(target.name)와 연결하지 못했어요", error.localizedDescription)
                 }
             }
+            try? syncLegacyScripts() // 옛 위치를 가리키던 훅이 다 옮겨졌으면 옛 스크립트를 정리
             UserDefaults.standard.set(false, forKey: "hooksDeclined")
         } else {
             UserDefaults.standard.set(true, forKey: "hooksDeclined")

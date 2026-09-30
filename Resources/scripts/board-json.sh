@@ -2,6 +2,8 @@
 # 세션 보드 데이터 → JSON 배열 (확인 필요 → 진행중 → 완료, 각각 최근 순)
 # 메뉴 막대 플러그인과 떠 있는 창이 같이 쓴다.
 set -u
+umask 077 # 캐시·기록 파일은 나만 읽게
+HERE="$(cd "$(dirname "$0")" && pwd)" # 이 스크립트가 있는 곳 (앱 안 Contents/Resources/scripts)
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 
 BOARD="$HOME/.claude/session-board"
@@ -14,7 +16,8 @@ STALE_SEC=600 # 진행중인데 이만큼 움직임이 없으면 경고
 CONFIG="$BOARD/config.json"
 BG_WARN_ON=$(jq -r 'if .bgWarnEnabled == false then "false" else "true" end' "$CONFIG" 2>/dev/null || echo true)
 BG_WARN_SEC=$(( $(jq -r '.bgWarnMinutes // 15' "$CONFIG" 2>/dev/null || echo 15) * 60 ))
-mkdir -p "$DIR"
+mkdir -p "$DIR" && chmod 700 "$BOARD" "$DIR" 2>/dev/null
+chmod 600 "$BOARD"/*.json "$BOARD"/.index.json "$BOARD"/update.log 2>/dev/null # 예전 버전이 만든 파일도
 
 # 데스크톱 앱 세션 목록 → CLI 세션 id 색인 (앱 세션 파일이 바뀌었을 때만 다시 만든다)
 if [ ! -f "$IDX" ] || [ -n "$(find "$SESS" -name 'local_*.json' -newer "$IDX" -print -quit 2>/dev/null)" ]; then
@@ -87,7 +90,7 @@ for f in "$DIR"/*.json; do
       if [ -n "$waiting" ]; then
         tmp=$(mktemp "$DIR/.tmp.XXXXXX")
         jq --arg r "$waiting" '.state = "needs_input" | .reason = $r' "$f" >"$tmp" && mv "$tmp" "$f"
-        "$BOARD/bin/notify.sh" "$(jq -r .session_id "$f")" "$waiting" codex >/dev/null 2>&1 &
+        "$HERE/notify.sh" "$(jq -r .session_id "$f")" "$waiting" codex >/dev/null 2>&1 &
       fi
     fi
 
@@ -122,7 +125,7 @@ for f in "$DIR"/*.json; do
       if [ "$BG_WARN_ON" = true ] && [ "$oldest" -gt 0 ] && [ $((now - oldest)) -gt $BG_WARN_SEC ] \
         && [ "$now" -gt "$(jq -r '.bg_snooze_until // 0' "$f")" ] && [ "$(jq -r '.bg_warned // false' "$f")" != true ]; then
         what="백그라운드 작업"; [ "$(jq -r '.agent // ""' "$f")" = codex ] && what="명령"
-        "$BOARD/bin/notify.sh" "$(jq -r .session_id "$f")" "$what $(( (now - oldest) / 60 ))분째, 멈췄는지 확인해 보세요" "$(jq -r '.agent // "claude"' "$f")" >/dev/null 2>&1 &
+        "$HERE/notify.sh" "$(jq -r .session_id "$f")" "$what $(( (now - oldest) / 60 ))분째, 멈췄는지 확인해 보세요" "$(jq -r '.agent // "claude"' "$f")" >/dev/null 2>&1 &
         tmp=$(mktemp "$DIR/.tmp.XXXXXX")
         jq '.bg_warned = true' "$f" >"$tmp" && mv "$tmp" "$f"
       fi

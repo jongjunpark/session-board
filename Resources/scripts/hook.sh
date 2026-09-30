@@ -5,17 +5,20 @@
 # 훅 결정에 끼어들지 않도록 stdout 에는 아무것도 쓰지 않고 항상 exit 0.
 set -u
 exec 1>/dev/null
+umask 077 # 기록 파일은 나만 읽게
+HERE="$(cd "$(dirname "$0")" && pwd)" # 이 스크립트가 있는 곳 (앱 안 Contents/Resources/scripts)
 
 AGENT="claude"
 [ "${1:-}" = "--agent" ] && AGENT="${2:-claude}"
 
 BOARD="$HOME/.claude/session-board"
 DIR="$BOARD/state"
-mkdir -p "$DIR"
+mkdir -p "$DIR" && chmod 700 "$BOARD" "$DIR" 2>/dev/null
 
 input=$(cat)
 sid=$(jq -r '.session_id // empty' <<<"$input")
-[ -z "$sid" ] && exit 0
+# 세션 번호는 파일 이름이 되므로 영문·숫자·- 만 받는다 (../ 로 기록 폴더 밖에 쓰지 못하게)
+[[ "$sid" =~ ^[A-Za-z0-9-]+$ ]] || exit 0
 event=$(jq -r '.hook_event_name // empty' <<<"$input")
 tool=$(jq -r '.tool_name // empty' <<<"$input")
 file="$DIR/$sid.json"
@@ -102,7 +105,7 @@ add_bg() {
 
 notify_needs_input() {
   [ "$cur" = "needs_input" ] && return
-  "$BOARD/bin/notify.sh" "$sid" "$1" "$AGENT" >/dev/null 2>&1 &
+  "$HERE/notify.sh" "$sid" "$1" "$AGENT" >/dev/null 2>&1 &
 }
 
 case "$event" in

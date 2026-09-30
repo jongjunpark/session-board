@@ -98,9 +98,10 @@ To know each session's state, SessionBoard adds **hooks** to Claude Code and Cod
 
 | Tool | Settings file | Command |
 |---|---|---|
-| Claude Code | `~/.claude/settings.json` | `~/.claude/session-board/bin/hook.sh` |
-| Codex | `~/.codex/hooks.json` | `~/.claude/session-board/bin/hook.sh --agent codex` |
+| Claude Code | `~/.claude/settings.json` | `/Applications/SessionBoard.app/Contents/Resources/scripts/hook.sh` |
+| Codex | `~/.codex/hooks.json` | `/Applications/SessionBoard.app/Contents/Resources/scripts/hook.sh --agent codex` |
 
+- The hook script lives **inside the app**. Keeping it in a folder an agent works in (such as your home folder) would let a sandboxed agent edit it and get code run outside the sandbox on the next hook.
 - Existing settings and hooks are left as they are; only the missing hooks are added. The original file is backed up next to it as `.bak-session-board-<timestamp>`.
 - The hook only writes session state files to `~/.claude/session-board/state/` and shows a notification when you're needed. It never changes a session, never approves anything for you, and sends nothing off your Mac.
 
@@ -124,7 +125,7 @@ To know each session's state, SessionBoard adds **hooks** to Claude Code and Cod
 
 ## How it works
 
-1. On every session event, Claude Code and Codex hooks run `~/.claude/session-board/bin/hook.sh`, which keeps one state file per session in `~/.claude/session-board/state/`.
+1. On every session event, Claude Code and Codex hooks run the `hook.sh` inside the app, which keeps one state file per session in `~/.claude/session-board/state/`.
 2. The app reads those files every 3 seconds. Titles come from the Claude desktop app's session data, from the transcript title for terminal sessions (`/rename` or the automatic title), or from Codex's saved thread title.
 3. Claude Code background tasks are recorded when they start and removed when their completion notice appears in the transcript. For Codex, each command is recorded when it starts and removed when it finishes; only commands still running after the turn ends are shown as background tasks.
 

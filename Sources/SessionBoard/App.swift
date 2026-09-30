@@ -252,9 +252,10 @@ enum SessionBoardMain {
             let ok = MainActor.assumeIsolated { () -> Bool in
                 do {
                     if args.contains("--install-hooks") {
-                        try Installer.installScripts()
+                        try Installer.syncLegacyScripts()
                         try Installer.installHooks(.claude)
                         if HookTarget.codexAvailable { try Installer.installHooks(.codex) }
+                        try Installer.syncLegacyScripts()
                     } else {
                         try Installer.uninstallHooks(.claude)
                         try Installer.uninstallHooks(.codex)

@@ -1,4 +1,4 @@
-// 세션 데이터 모델 — 데이터는 ~/.claude/session-board/bin/board-json.sh 가 만든다
+// 세션 데이터 모델 — 데이터는 앱 안의 scripts/board-json.sh 가 만든다
 import AppKit
 import SwiftUI
 
@@ -133,7 +133,7 @@ final class BoardModel: ObservableObject {
     nonisolated private static func load() -> [BoardItem]? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = [boardDir + "/bin/board-json.sh"]
+        process.arguments = [scriptsDir + "/board-json.sh"]
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
@@ -161,14 +161,22 @@ final class BoardModel: ObservableObject {
         NSWorkspace.shared.open(url)
     }
 
+    // 세션 번호는 파일 이름이 되므로 영문·숫자·- 만 받는다 (../ 로 기록 폴더 밖의 파일을 지우지 못하게)
+    nonisolated static func stateFile(_ sessionID: String) -> String? {
+        guard !sessionID.isEmpty,
+              sessionID.unicodeScalars.allSatisfy({ CharacterSet.alphanumerics.contains($0) || $0 == "-" }),
+              sessionID.allSatisfy(\.isASCII) else { return nil }
+        return "\(boardDir)/state/\(sessionID).json"
+    }
+
     func check(_ item: BoardItem) {
-        try? FileManager.default.removeItem(atPath: "\(boardDir)/state/\(item.session_id).json")
+        if let path = BoardModel.stateFile(item.session_id) { try? FileManager.default.removeItem(atPath: path) }
         refresh()
     }
 
     func checkAllDone() {
         for item in done {
-            try? FileManager.default.removeItem(atPath: "\(boardDir)/state/\(item.session_id).json")
+            if let path = BoardModel.stateFile(item.session_id) { try? FileManager.default.removeItem(atPath: path) }
         }
         refresh()
     }
@@ -177,7 +185,7 @@ final class BoardModel: ObservableObject {
     func snooze(_ item: BoardItem) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = [boardDir + "/bin/action.sh", "snooze", item.session_id]
+        process.arguments = [scriptsDir + "/action.sh", "snooze", item.session_id]
         process.terminationHandler = { _ in
             Task { @MainActor in self.refresh() }
         }

@@ -33,6 +33,7 @@ final class BoardConfig: ObservableObject {
         guard let data = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]) else { return }
         try? FileManager.default.createDirectory(atPath: boardDir, withIntermediateDirectories: true)
         try? data.write(to: URL(fileURLWithPath: path), options: .atomic)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path) // 나만 읽게
     }
 
     static func label(_ minutes: Int) -> String {

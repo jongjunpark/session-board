@@ -96,9 +96,10 @@ SessionBoard 는 세션 상태를 알기 위해 Claude Code 와 Codex 에 **훅*
 
 | 도구 | 설정 파일 | 실행하는 명령 |
 |---|---|---|
-| Claude Code | `~/.claude/settings.json` | `~/.claude/session-board/bin/hook.sh` |
-| Codex | `~/.codex/hooks.json` | `~/.claude/session-board/bin/hook.sh --agent codex` |
+| Claude Code | `~/.claude/settings.json` | `/Applications/SessionBoard.app/Contents/Resources/scripts/hook.sh` |
+| Codex | `~/.codex/hooks.json` | `/Applications/SessionBoard.app/Contents/Resources/scripts/hook.sh --agent codex` |
 
+- 훅이 부르는 스크립트는 **앱 안**에 있어요. 에이전트가 일하는 폴더(홈 폴더 등)에 두면, 샌드박스 안에서 도는 에이전트가 스크립트를 고쳐 샌드박스 밖에서 실행되게 할 수 있어서예요.
 - 이미 있는 다른 설정과 훅은 그대로 두고, 필요한 훅만 더해요. 고치기 전 원본은 같은 폴더에 `.bak-session-board-<시각>` 으로 백업해요.
 - 훅은 세션 상태를 `~/.claude/session-board/state/` 에 파일로 남기고, 확인이 필요할 때 알림을 띄우는 일만 해요. 세션 내용을 바꾸거나 승인을 대신 누르지 않고, 외부로 아무것도 보내지 않아요.
 
@@ -122,7 +123,7 @@ SessionBoard 는 세션 상태를 알기 위해 Claude Code 와 Codex 에 **훅*
 
 ## 동작 방식
 
-1. 세션에 변화가 생길 때마다 Claude Code·Codex 훅이 `~/.claude/session-board/bin/hook.sh` 를 실행해서, 세션별 상태 파일(`~/.claude/session-board/state/*.json`)을 기록해요.
+1. 세션에 변화가 생길 때마다 Claude Code·Codex 훅이 앱 안의 `hook.sh` 를 실행해서, 세션별 상태 파일(`~/.claude/session-board/state/*.json`)을 기록해요.
 2. 앱은 3초마다 이 파일들을 읽어 화면에 보여 줘요. 세션 제목은 Claude 데스크톱 앱의 세션 정보에서 가져오고, 터미널 세션은 대화 기록에 저장된 제목(`/rename` 으로 붙인 이름이나 자동 제목)을, Codex 세션은 Codex 가 저장한 스레드 제목을 써요.
 3. Claude Code 의 백그라운드 작업은 시작할 때 기록해 두고 대화 기록에 완료 알림이 들어오면 빼요. Codex 는 명령이 시작될 때 기록해 두고 끝나면 빼는데, 답(턴)이 끝난 뒤에도 남아 도는 명령만 백그라운드 작업으로 보여 줘요.
 
