@@ -72,6 +72,19 @@ for f in "$DIR"/*.json; do
       fi
     fi
 
+    # Claude: ESC 로 멈추면 Stop 훅이 오지 않는다. 대화 기록의 마지막 말이 중단 표시
+    # ("[Request interrupted by user]" / "… for tool use]")면 중단됨으로 끝낸다 (다시 말을 걸면 훅이 진행중으로 되돌린다)
+    if [ "$(jq -r '.agent // "claude"' "$f")" = claude ] && [ "$(jq -r '.state' "$f")" != done ]; then
+      if tail -n 40 "$tr" | jq -rs '
+          [ .[] | select(.type? == "user" or .type? == "assistant") ] | last
+          | select(.type == "user")
+          | [ .message.content | if type == "array" then .[] | select(type == "object" and .type == "text") | .text else tostring end ]
+          | any(startswith("[Request interrupted by user"))' 2>/dev/null | grep -qx true; then
+        tmp=$(mktemp "$DIR/.tmp.XXXXXX")
+        jq --argjson now "$(date +%s)" '.state = "done" | .reason = "중단됨" | .updated_at = $now' "$f" >"$tmp" && mv "$tmp" "$f"
+      fi
+    fi
+
     # Codex: 인터넷 등 권한 요청(request_permissions)·질문은 창이 떠 있는 동안 훅 신호가 없다.
     # 대화 기록 끝에 결과 없이 걸린 도구 호출이 그런 요청이면 확인 필요로 바꾸고 한 번 알린다.
     # (답하면 도구가 끝나며 오는 훅 신호로 진행중으로 돌아간다)
