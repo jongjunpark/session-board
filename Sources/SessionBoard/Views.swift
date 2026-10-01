@@ -22,7 +22,7 @@ struct BoardView: View {
                 peekContent
             }
         }
-        .frame(width: model.collapsed ? (model.peek ? 210 : nil) : 320)
+        .frame(width: model.collapsed ? (model.peek ? 210 : nil) : model.expandedWidth)
     }
 
     private var header: some View {

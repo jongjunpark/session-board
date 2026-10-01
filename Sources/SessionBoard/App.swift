@@ -40,6 +40,38 @@ final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
     }
 }
 
+// 펼친 유리 판의 왼쪽·오른쪽 가장자리. 끌면 너비가 바뀐다 (창 끌기로 넘어가지 않게 직접 받는다)
+final class EdgeResizeHandle: NSView {
+    enum Edge { case left, right }
+    enum Phase { case began, changed, ended }
+
+    let edge: Edge
+    var onDrag: ((_ edge: Edge, _ phase: Phase, _ mouseX: CGFloat) -> Void)?
+
+    init(edge: Edge) {
+        self.edge = edge
+        super.init(frame: .zero)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    override var mouseDownCanMoveWindow: Bool { false }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    // 활성화되지 않는 창이라 커서 영역 대신 항상 켜진 추적 영역으로 커서를 바꾼다
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.cursorUpdate, .activeAlways, .inVisibleRect],
+                                       owner: self, userInfo: nil))
+    }
+
+    override func cursorUpdate(with event: NSEvent) { NSCursor.resizeLeftRight.set() }
+    override func mouseDown(with event: NSEvent) { onDrag?(edge, .began, NSEvent.mouseLocation.x) }
+    override func mouseDragged(with event: NSEvent) { onDrag?(edge, .changed, NSEvent.mouseLocation.x) }
+    override func mouseUp(with event: NSEvent) { onDrag?(edge, .ended, NSEvent.mouseLocation.x) }
+}
+
 final class BoardPanel: NSPanel {
     override var canBecomeKey: Bool { true }
 }
@@ -54,6 +86,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var fitGeneration = 0
     private var isResizing = false
     private var menuBar: MenuBarController?
+    private let leftHandle = EdgeResizeHandle(edge: .left)
+    private let rightHandle = EdgeResizeHandle(edge: .right)
+    // 너비를 끌기 시작할 때의 포인터 위치·너비·창 위치
+    private var widthDrag: (mouseX: CGFloat, width: CGFloat, frame: NSRect)?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -96,6 +132,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         self.panel = panel
         self.host = host
+        for handle in [leftHandle, rightHandle] {
+            handle.onDrag = { [weak self] edge, phase, x in self?.dragWidth(edge: edge, phase: phase, mouseX: x) }
+            host.addSubview(handle)
+        }
 
         let size = contentSize(collapsed: model.collapsed, peek: false, items: model.items)
         // 데모는 저장된 위치를 쓰지 않고 화면 가운데쯤에 띄운다
@@ -103,6 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.setFrame(NSRect(x: topRight.x - size.width, y: topRight.y - size.height,
                               width: size.width, height: size.height), display: true)
         panel.orderFrontRegardless()
+        layoutHandles(collapsed: model.collapsed)
 
         // 오른쪽 위 모서리를 기억한다 (접고 펼 때 기준점)
         NotificationCenter.default.addObserver(
@@ -155,8 +196,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // 주어진 상태일 때 유리 판 여백까지 포함한 창 크기.
     // 매번 새 복제 모델·새 측정기로 잰다 (같은 측정기를 다시 쓰면 SwiftUI 가 한 박자 늦게 반영해 직전 크기가 나온다)
-    private func contentSize(collapsed: Bool, peek: Bool, items: [BoardItem]) -> NSSize {
+    private func contentSize(collapsed: Bool, peek: Bool, items: [BoardItem], width: CGFloat? = nil) -> NSSize {
         let probe = BoardModel()
+        probe.expandedWidth = width ?? model.expandedWidth
         probe.apply(collapsed: collapsed, peek: peek, items: items, animated: false, persist: false)
         let inner = NSHostingController(rootView: BoardView(model: probe))
             .sizeThatFits(in: NSSize(width: 2000, height: 2000))
@@ -194,7 +236,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + BoardModel.motionDuration) { [weak self] in
                 guard let self, generation == self.fitGeneration else { return }
                 self.resize(to: target)
+                self.layoutHandles(collapsed: collapsed)
             }
+        }
+    }
+
+    // 가장자리 손잡이를 유리 판의 왼쪽·오른쪽 끝에 둔다 (펼쳤을 때만)
+    private func layoutHandles(collapsed: Bool) {
+        guard let host else { return }
+        let bounds = host.bounds
+        let margin = AnchoredBoard.margin
+        let grip: CGFloat = 8
+        let height = max(0, bounds.height - margin * 2)
+        let right = bounds.width - margin
+        leftHandle.frame = NSRect(x: right - model.expandedWidth - grip / 2, y: margin, width: grip, height: height)
+        rightHandle.frame = NSRect(x: right - grip / 2, y: margin, width: grip, height: height)
+        leftHandle.isHidden = collapsed
+        rightHandle.isHidden = collapsed
+    }
+
+    // 왼쪽을 끌면 오른쪽 위 모서리를 그대로 두고 왼쪽으로 넓어진다.
+    // 오른쪽을 끌면 오른쪽 끝이 따라 움직인다 (기준점도 함께 옮겨져 접힌 알약이 새 오른쪽 끝에 붙는다)
+    private func dragWidth(edge: EdgeResizeHandle.Edge, phase: EdgeResizeHandle.Phase, mouseX: CGFloat) {
+        guard let panel else { return }
+        switch phase {
+        case .began:
+            widthDrag = (mouseX, model.expandedWidth, panel.frame)
+        case .changed:
+            guard let start = widthDrag else { return }
+            let delta = edge == .left ? start.mouseX - mouseX : mouseX - start.mouseX
+            let screenWidth = (panel.screen ?? NSScreen.main)?.visibleFrame.width ?? 1440
+            let maxWidth = max(BoardModel.minWidth, (screenWidth / 2).rounded())
+            let width = min(max((start.width + delta).rounded(), BoardModel.minWidth), maxWidth)
+            guard width != model.expandedWidth else { return }
+            let size = contentSize(collapsed: false, peek: false, items: model.items, width: width)
+            let maxX = edge == .left ? start.frame.maxX : start.frame.maxX + (width - start.width)
+            fitGeneration += 1 // 진행 중인 크기 맞추기가 끌기를 덮어쓰지 않게
+            isResizing = true
+            panel.setFrame(NSRect(x: maxX - size.width, y: start.frame.maxY - size.height,
+                                  width: size.width, height: size.height), display: false)
+            isResizing = false
+            model.expandedWidth = width
+            layoutHandles(collapsed: false)
+        case .ended:
+            widthDrag = nil
+            model.saveWidth()
         }
     }
 

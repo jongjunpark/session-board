@@ -27,6 +27,18 @@ final class BoardModel: ObservableObject {
     @Published private(set) var collapsed: Bool = UserDefaults.standard.bool(forKey: "collapsed")
     // 접힌 상태에서 마우스를 올려 두면 짧은 목록을 잠깐 펼친다
     @Published private(set) var peek = false
+    // 펼친 창의 너비. 유리 판 왼쪽·오른쪽 가장자리를 끌어 바꾸고, 다음에 펼칠 때도 그대로 쓴다
+    @Published var expandedWidth: CGFloat = BoardModel.savedWidth()
+    static let minWidth: CGFloat = 320
+
+    private static func savedWidth() -> CGFloat {
+        let saved = UserDefaults.standard.double(forKey: "expandedWidth")
+        return saved >= minWidth ? saved : minWidth
+    }
+
+    func saveWidth() {
+        if !demoMode { UserDefaults.standard.set(Double(expandedWidth), forKey: "expandedWidth") }
+    }
 
     // 펼침·접힘·목록 변화 공용 움직임: 넘치지 않고 끝에서 부드럽게 멈추는 감속 곡선
     static let motion = Animation.timingCurve(0.22, 1, 0.36, 1, duration: 0.3)
