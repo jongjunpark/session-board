@@ -95,10 +95,11 @@ for f in "$DIR"/*.json; do
       fi
     fi
 
-    # Codex 명령: 끝 신호(PostToolUse)를 끝내 못 받은 기록은 6시간 뒤 정리한다 (창을 닫았거나 /stop 등)
-    if [ "$(jq -r '[.bg // [] | .[] | select(.kind == "command" and (now - .at) > 21600)] | length' "$f")" -gt 0 ]; then
+    # 끝 신호를 끝내 못 받은 백그라운드 작업은 6시간 뒤 정리한다
+    # (Codex 창을 닫았거나 /stop, Claude 세션이 완료 알림 없이 닫힌 경우 등)
+    if [ "$(jq -r '[.bg // [] | .[] | select((now - .at) > 21600)] | length' "$f")" -gt 0 ]; then
       tmp=$(mktemp "$DIR/.tmp.XXXXXX")
-      jq '.bg = ((.bg // []) | map(select(.kind != "command" or (now - .at) <= 21600)))' "$f" >"$tmp" && mv "$tmp" "$f"
+      jq '.bg = ((.bg // []) | map(select((now - .at) <= 21600)))' "$f" >"$tmp" && mv "$tmp" "$f"
     fi
 
     # 백그라운드 작업: 대화 기록에 완료 알림(<task-notification>)이 온 것은 목록에서 뺀다
@@ -106,9 +107,11 @@ for f in "$DIR"/*.json; do
       # 완료가 확인된 호출 번호만 모은다
       finished=$(jq -c '.bg[]' "$f" | while IFS= read -r b; do
         tu=$(jq -r '.tool_use_id' <<<"$b"); ti=$(jq -r '.task_id' <<<"$b")
-        # 진짜 완료 알림은 작업 번호 바로 뒤에 도구 호출 번호가 붙어 나온다 (대화 중에 번호만 언급된 것과 구분)
-        if [ -n "$tu" ] && [ -n "$ti" ] \
-          && grep -qF "<task-id>${ti}</task-id>\\n<tool-use-id>${tu}</tool-use-id>" "$tr"; then echo "$tu"; fi
+        # 완료 알림(<task-notification>)은 작업 번호 바로 뒤에 무엇이 붙느냐로 대화 중에 번호만 언급된 것과 구분한다:
+        #   <tool-use-id> (지금 형식) · <output-file> (옛 형식) · <task-id> (세션을 다시 열 때 여러 작업을 한꺼번에 정리하는 알림)
+        #   Monitor 가 시간 제한으로 끝나면 "Monitor event" 로 만료(expired / timed out)를 알린다 (중간 소식은 끝이 아니다)
+        if [ -n "$ti" ] \
+          && LC_ALL=C /usr/bin/grep -qE "<task-id>${ti}</task-id>\\\\n(<tool-use-id>|<output-file>|<task-id>)|<task-id>${ti}</task-id>\\\\n<summary>Monitor event: [^<]*</summary>\\\\n<event>\[Monitor (expired|timed out)" "$tr"; then echo "$tu"; fi
         # Codex 명령: 결과를 먼저 돌려받고 계속 돌던 명령은 아무도 다시 확인하지 않고 끝나면 PostToolUse 가 오지 않는다.
         # 대신 끝날 때 대화 기록에 같은 번호로 CommandExecution 완료(item_completed)가 남는다
         if [ -n "$tu" ] && [ -z "$ti" ] \

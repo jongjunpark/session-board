@@ -94,17 +94,19 @@ add_bg() {
   # 그 작업 번호를 돌려주는 호출을 도구 이름과 상관없이 모두 백그라운드 작업으로 기록한다 (지난 60일 기록으로 확인한 모양):
   #   명령(Bash, run_in_background 이거나 시간 초과로 넘어간 것) → backgroundTaskId
   #   에이전트(요청했거나 알아서 넘어간 것) → isAsync / status "async_launched" + agentId
-  #   Monitor·Workflow 등 → taskId,  멈춘 에이전트를 SendMessage 로 다시 깨움 → resumedAgentId
+  #   Monitor(taskId + timeoutMs)·Workflow(taskId + taskType),  멈춘 에이전트를 SendMessage 로 다시 깨움 → resumedAgentId
+  #   (할 일 목록 TaskUpdate 도 taskId 를 돌려주지만 뒤에서 도는 작업이 아니다 — 그래서 taskId 만으로는 보지 않는다)
   local task
   task=$(jq -r '.tool_response as $r
     | if ($r | type) != "object" then ""
       elif ($r.backgroundTaskId // "") != "" then $r.backgroundTaskId
-      elif ($r.taskId // "") != "" then $r.taskId
+      elif ($r.taskId // "") != "" and ($r.timeoutMs != null or $r.taskType != null) then ($r.taskId | tostring)
       elif ($r.resumedAgentId // "") != "" then $r.resumedAgentId
       elif ($r.isAsync == true or $r.status == "async_launched") and ($r.agentId // "") != "" then $r.agentId
       else "" end
-    # 구조화된 값이 없을 때는 결과 문구에서 번호를 읽는다
-    | if . != "" then .
+    # 구조화된 값이 없을 때(결과가 글로만 남은 경우)는 결과 문구에서 번호를 읽는다.
+    # 결과가 객체면 읽지 않는다 — 명령 출력(stdout)에 그 문구가 찍힌 것까지 잡게 된다
+    | if . != "" or ($r | type) == "object" then .
       else ($r | tostring) as $t
         | (($t | capture("Async agent launched[^\n]*?agentId: (?<id>[A-Za-z0-9]+)")? // null)
            // ($t | capture("[Rr]unning in background with ID: (?<id>[A-Za-z0-9]+)")? // null)
