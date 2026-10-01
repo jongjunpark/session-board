@@ -58,18 +58,42 @@ final class EdgeResizeHandle: NSView {
     override var mouseDownCanMoveWindow: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    // 활성화되지 않는 창이라 커서 영역 대신 항상 켜진 추적 영역으로 커서를 바꾼다
+    // 유리 판 바깥 여백은 투명이라 마우스 신호가 아래 창으로 지나간다. 눈에 안 보일 만큼 옅게 칠해 신호를 받는다
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.black.withAlphaComponent(0.01).setFill()
+        dirtyRect.fill()
+    }
+
+    // 활성화되지 않는 창이라 커서 영역 대신 항상 켜진 추적 영역으로 커서를 바꾼다.
+    // 아래 SwiftUI 화면이 커서를 화살표로 되돌리므로, 들어올 때 한 번이 아니라 움직일 때마다 다시 정한다
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         trackingAreas.forEach(removeTrackingArea)
-        addTrackingArea(NSTrackingArea(rect: .zero, options: [.cursorUpdate, .activeAlways, .inVisibleRect],
-                                       owner: self, userInfo: nil))
+        addTrackingArea(NSTrackingArea(
+            rect: .zero,
+            options: [.cursorUpdate, .mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
+            owner: self, userInfo: nil))
     }
 
+    private var dragging = false
     override func cursorUpdate(with event: NSEvent) { NSCursor.resizeLeftRight.set() }
-    override func mouseDown(with event: NSEvent) { onDrag?(edge, .began, NSEvent.mouseLocation.x) }
-    override func mouseDragged(with event: NSEvent) { onDrag?(edge, .changed, NSEvent.mouseLocation.x) }
-    override func mouseUp(with event: NSEvent) { onDrag?(edge, .ended, NSEvent.mouseLocation.x) }
+    override func mouseEntered(with event: NSEvent) { NSCursor.resizeLeftRight.set() }
+    override func mouseMoved(with event: NSEvent) { NSCursor.resizeLeftRight.set() }
+    override func mouseExited(with event: NSEvent) { if !dragging { NSCursor.arrow.set() } }
+    override func mouseDown(with event: NSEvent) {
+        dragging = true
+        NSCursor.resizeLeftRight.set()
+        onDrag?(edge, .began, NSEvent.mouseLocation.x)
+    }
+    override func mouseDragged(with event: NSEvent) {
+        NSCursor.resizeLeftRight.set() // 끄는 동안 포인터가 손잡이를 벗어나도 유지
+        onDrag?(edge, .changed, NSEvent.mouseLocation.x)
+    }
+    override func mouseUp(with event: NSEvent) {
+        dragging = false
+        onDrag?(edge, .ended, NSEvent.mouseLocation.x)
+        if !NSPointInRect(convert(event.locationInWindow, from: nil), bounds) { NSCursor.arrow.set() }
+    }
 }
 
 final class BoardPanel: NSPanel {
@@ -111,10 +135,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.hasShadow = false // 그림자는 유리 효과가 직접 그린다 (창 그림자는 여백까지 네모로 그려짐)
         panel.isMovableByWindowBackground = true
         panel.hidesOnDeactivate = false
+        panel.acceptsMouseMovedEvents = true // 가장자리 손잡이가 움직임마다 커서를 다시 정한다
 
         let host = FirstMouseHostingView(rootView: AnchoredBoard(model: model))
         host.sizingOptions = [] // 창 크기는 transition 이 정한다 (제약이 애니메이션과 다투지 않게)
-        panel.contentView = host
+        // SwiftUI 화면 위에 가장자리 손잡이를 얹으려고 평범한 컨테이너에 함께 넣는다
+        // (NSHostingView 안에 직접 넣으면 클릭을 SwiftUI 가 가져간다)
+        let container = NSView()
+        host.autoresizingMask = [.width, .height]
+        container.addSubview(host)
+        panel.contentView = container
+        host.frame = container.bounds
         host.onHoverChange = { [weak self] inside in self?.model.hoverChanged(inside) }
         host.onPress = { [weak self] in self?.model.holdPeek() }
         // 실제 포인터가 유리 판(창에서 여백을 뺀 곳) 위에 있는지
@@ -134,7 +165,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.host = host
         for handle in [leftHandle, rightHandle] {
             handle.onDrag = { [weak self] edge, phase, x in self?.dragWidth(edge: edge, phase: phase, mouseX: x) }
-            host.addSubview(handle)
+            container.addSubview(handle)
         }
 
         let size = contentSize(collapsed: model.collapsed, peek: false, items: model.items)
@@ -243,14 +274,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // 가장자리 손잡이를 유리 판의 왼쪽·오른쪽 끝에 둔다 (펼쳤을 때만)
     private func layoutHandles(collapsed: Bool) {
-        guard let host else { return }
-        let bounds = host.bounds
+        guard let bounds = panel?.contentView?.bounds else { return }
         let margin = AnchoredBoard.margin
-        let grip: CGFloat = 8
+        // 잡기 쉽게 유리 판 바깥 여백까지 넓게 잡는다 (바깥 12 + 안쪽 6)
+        let outside: CGFloat = 12, inside: CGFloat = 6
         let height = max(0, bounds.height - margin * 2)
         let right = bounds.width - margin
-        leftHandle.frame = NSRect(x: right - model.expandedWidth - grip / 2, y: margin, width: grip, height: height)
-        rightHandle.frame = NSRect(x: right - grip / 2, y: margin, width: grip, height: height)
+        let left = right - model.expandedWidth
+        leftHandle.frame = NSRect(x: left - outside, y: margin, width: outside + inside, height: height)
+        rightHandle.frame = NSRect(x: right - inside, y: margin, width: outside + inside, height: height)
         leftHandle.isHidden = collapsed
         rightHandle.isHidden = collapsed
     }

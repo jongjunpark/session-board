@@ -28,11 +28,17 @@ struct BoardView: View {
     private var header: some View {
         HStack(spacing: 8) {
             if !model.collapsed {
-                Text("Session Board").font(.system(size: 12, weight: .semibold))
+                // 창을 좁혀 개수 표시와 겹치면 제목을 통째로 숨긴다 (잘린 "Sess…" 대신).
+                // 개수·버튼이 먼저 자리를 잡고(우선순위 0), 남는 폭에 제목(-1), 그 나머지를 빈칸(-2)이 채운다
+                ViewThatFits(in: .horizontal) {
+                    Text("Session Board").font(.system(size: 12, weight: .semibold)).fixedSize()
+                    Color.clear.frame(width: 0, height: 0)
+                }
+                .layoutPriority(-1)
             }
             // 개수·접기 버튼은 늘 오른쪽 끝에 붙인다 (접고 펴고 호버해도 제자리).
             // 접힌 알약은 폭이 정해져 있지 않아서 빈칸을 넣으면 화면 끝까지 늘어나므로 뺀다
-            if !model.collapsed || model.peek { Spacer(minLength: 0) }
+            if !model.collapsed || model.peek { Spacer(minLength: 0).layoutPriority(-2) }
             updateChip
             countChip("●", model.needs.count, Palette.needs)
             countChip("⟳", model.running.count, Palette.running)
@@ -308,8 +314,9 @@ struct BoardRow: View {
                 Button {
                     model.snooze(item)
                 } label: {
-                    Text("더 기다리기")
+                    Text("기다리기")
                         .font(.system(size: 11, weight: .semibold))
+                        .fixedSize() // 창을 좁혀도 글자가 잘리지 않게
                         .foregroundStyle(Palette.needs)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
@@ -319,7 +326,7 @@ struct BoardRow: View {
                 }
                 .buttonStyle(.plain)
                 .help("정상으로 도는 중이면 \(BoardConfig.label(BoardConfig.shared.bgWarnMinutes)) 뒤에 다시 알려요")
-                .accessibilityLabel("더 기다리기")
+                .accessibilityLabel("기다리기")
             }
         }
         .padding(.horizontal, 10)
@@ -335,7 +342,7 @@ struct BoardRow: View {
         .contextMenu {
             Button("세션 열기") { model.open(item) }
             if item.bg_warn {
-                Button("더 기다리기 (\(BoardConfig.label(BoardConfig.shared.bgWarnMinutes)) 뒤 다시 알림)") { model.snooze(item) }
+                Button("기다리기 (\(BoardConfig.label(BoardConfig.shared.bgWarnMinutes)) 뒤 다시 알림)") { model.snooze(item) }
             }
             Button(item.state == "done" ? "확인 완료" : "목록에서 제거") { model.check(item) }
         }

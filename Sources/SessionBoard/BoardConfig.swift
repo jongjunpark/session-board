@@ -10,7 +10,7 @@ final class BoardConfig: ObservableObject {
 
     // 백그라운드 작업이 오래 돌면 확인 필요로 올리고 알릴지
     @Published var bgWarnEnabled = true { didSet { save() } }
-    // 그 기준 시간이자 "더 기다리기"로 미루는 시간 (분)
+    // 그 기준 시간이자 "기다리기"로 미루는 시간 (분)
     @Published var bgWarnMinutes = 15 { didSet { save() } }
 
     private var loading = false

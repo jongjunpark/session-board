@@ -60,7 +60,7 @@ Most of the time the window stays collapsed and only shows counts.
 | Click the collapsed window | Opens the full window with summaries and buttons |
 | Click a session | Opens it in the Claude or Codex app (sessions started in a terminal bring that terminal app forward) |
 | **확인** (Confirm) on a done session | Removes it from the list (appears on hover) |
-| **더 기다리기** (Wait longer) | Postpones the long-running background task alert by the configured time |
+| **기다리기** (Wait longer) | Postpones the long-running background task alert by the configured time |
 | Right-click the top of the window | Confirm all done, refresh, settings, quit |
 | Drag the window | Move it anywhere; the position is remembered |
 

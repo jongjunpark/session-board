@@ -113,7 +113,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             sub.addItem(action("세션 열기") { [weak self] in self?.model.open(item) })
             if item.bg_warn {
                 let wait = BoardConfig.label(BoardConfig.shared.bgWarnMinutes)
-                sub.addItem(action("더 기다리기 (\(wait) 뒤 다시 알림)") { [weak self] in self?.model.snooze(item) })
+                sub.addItem(action("기다리기 (\(wait) 뒤 다시 알림)") { [weak self] in self?.model.snooze(item) })
             }
             sub.addItem(action(item.state == "done" ? "확인 완료" : "목록에서 제거") { [weak self] in
                 self?.model.check(item)

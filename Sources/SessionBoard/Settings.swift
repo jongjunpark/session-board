@@ -33,7 +33,7 @@ struct SettingsView: View {
             } header: {
                 Text("백그라운드 작업")
             } footer: {
-                Text("설정한 시간이 지나도 작업이 끝나지 않으면 알려 드려요. \"더 기다리기\"를 누르면 같은 시간만큼 다시 기다려요.")
+                Text("설정한 시간이 지나도 작업이 끝나지 않으면 알려 드려요. \"기다리기\"를 누르면 같은 시간만큼 다시 기다려요.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

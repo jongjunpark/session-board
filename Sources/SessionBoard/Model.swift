@@ -29,7 +29,7 @@ final class BoardModel: ObservableObject {
     @Published private(set) var peek = false
     // 펼친 창의 너비. 유리 판 왼쪽·오른쪽 가장자리를 끌어 바꾸고, 다음에 펼칠 때도 그대로 쓴다
     @Published var expandedWidth: CGFloat = BoardModel.savedWidth()
-    static let minWidth: CGFloat = 320
+    static let minWidth: CGFloat = 200
 
     private static func savedWidth() -> CGFloat {
         let saved = UserDefaults.standard.double(forKey: "expandedWidth")

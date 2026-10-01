@@ -12,7 +12,7 @@ SESS="$HOME/Library/Application Support/Claude/claude-code-sessions"
 IDX="$BOARD/.index-v2.json" # v2: 앱 세션의 "지금 번호"(current)를 함께 담는다
 rm -f "$BOARD/.index.json" # 예전 형식 캐시
 STALE_SEC=600 # 진행중인데 이만큼 움직임이 없으면 경고
-# 백그라운드 작업이 기준 시간을 넘게 돌면 확인 필요로 올린다 ("더 기다리기"로 같은 만큼 미룸).
+# 백그라운드 작업이 기준 시간을 넘게 돌면 확인 필요로 올린다 ("기다리기"로 같은 만큼 미룸).
 # 켜기/끄기와 시간은 앱 설정 창에서 정하고 config.json 에 저장된다 (없으면 켜짐·15분)
 CONFIG="$BOARD/config.json"
 BG_WARN_ON=$(jq -r 'if .bgWarnEnabled == false then "false" else "true" end' "$CONFIG" 2>/dev/null || echo true)
@@ -225,7 +225,7 @@ jq -c --slurpfile idx "$IDX" --argjson cidx "$CIDX" --argjson now "$(date +%s)" 
     # 터미널에서 띄운 Codex CLI 세션인지 (띄운 앱이 비어 있거나 Codex 앱이면 앱 세션)
     | ($src.kind == "codex" and (($s.app_bundle // "") | IN("", "com.openai.codex") | not)) as $codexTerminal
     | (if $bgn > 0 then $now - ($bglist | min_by(.at).at) else 0 end) as $bgage
-    # 백그라운드 작업이 기준 시간을 넘겼고 "더 기다리기"로 미룬 시간도 지났으면 확인 필요
+    # 백그라운드 작업이 기준 시간을 넘겼고 "기다리기"로 미룬 시간도 지났으면 확인 필요
     | ($bgon and $bgn > 0 and $bgage > $bgwarn and $now > ($s.bg_snooze_until // 0)) as $bgwarned
     # 화면에 보일 상태: 확인 필요 > 오래 걸리는 백그라운드 > 답은 끝났지만 백그라운드가 도는 중 > 원래 상태
     | (if $s.state == "needs_input" then "needs_input"
@@ -251,7 +251,7 @@ jq -c --slurpfile idx "$IDX" --argjson cidx "$CIDX" --argjson now "$(date +%s)" 
         summary: (($s.summary // "") | gsub("\\[(?<t>[^\\]]*)\\]\\([^)]*\\)?"; "\(.t)") | gsub("https?://\\S+"; "") | gsub("\\s+"; " ") | ltrimstr(" ") | rtrimstr(" ")),
         stale: ($state == "running" and $bgn == 0 and $idle > $stale),
         bg_count: $bgn,
-        # 오래 걸리는 백그라운드 때문에 확인 필요가 된 항목 ("더 기다리기" 버튼)
+        # 오래 걸리는 백그라운드 때문에 확인 필요가 된 항목 ("기다리기" 버튼)
         bg_warn: ($bgwarned and $s.state != "needs_input"),
         updated_at: $s.updated_at,
         # 호버 때 뜨는 짧은 목록용 한 단어 표시
