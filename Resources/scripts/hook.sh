@@ -25,6 +25,17 @@ file="$DIR/$sid.json"
 cur=""
 [ -f "$file" ] && cur=$(jq -r '.state // empty' "$file" 2>/dev/null)
 
+# 받은 신호를 짧게 남긴다 (상태가 이상하게 바뀌었을 때 어떤 신호 때문인지 찾으려고).
+# 시각·도구 종류·이벤트·세션·도구 이름·알림 종류와 문구 앞부분만. 프롬프트·도구 입력·출력은 남기지 않는다. 최근 500줄만 둔다
+EVENTS="$BOARD/events.log"
+{
+  printf '%s\t%s\t%s\t%s\t%s\t' "$(date '+%m-%d %H:%M:%S')" "$AGENT" "$event" "${sid:0:8}" "$tool"
+  jq -r '[(.notification_type // ""), ((.message // "") | gsub("[\t\n]"; " ") | .[0:100])] | @tsv' <<<"$input"
+} >>"$EVENTS" 2>/dev/null
+if [ "$(wc -l <"$EVENTS" 2>/dev/null || echo 0)" -gt 600 ]; then
+  tail -n 500 "$EVENTS" >"$EVENTS.tmp" 2>/dev/null && mv "$EVENTS.tmp" "$EVENTS"
+fi
+
 # write <state> <reason> <summary>
 write() {
   local prev="null"

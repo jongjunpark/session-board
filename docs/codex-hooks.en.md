@@ -31,5 +31,5 @@ If you choose `3. Continue without trusting`, the hooks won't run and Codex sess
 
 - **Updating SessionBoard usually doesn't require approving again.** Codex remembers trust per hook definition in `hooks.json` (command, event, matcher). You only need to approve again when an update changes those definitions, and the app tells you first.
 - Trust is stored in `[hooks.state]` in `~/.codex/config.toml`. SessionBoard never writes trust records for you — that would bypass Codex's security review.
-- The hooks only write session state files to `~/.claude/session-board/state/` and show a notification when you're needed. They never change a session, never approve anything for you, and send nothing off your Mac.
+- The hooks only write session state files to `~/.claude/session-board/state/` (plus the last 500 received event types in `events.log`, for troubleshooting) and show a notification when you're needed. They never change a session, never approve anything for you, and send nothing off your Mac.
 - See the connection state and connect/disconnect under **설정… → 관리 → Codex 연동** (Settings → Manage → Codex).

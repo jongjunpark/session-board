@@ -103,7 +103,7 @@ To know each session's state, SessionBoard adds **hooks** to Claude Code and Cod
 
 - The hook script lives **inside the app**. Keeping it in a folder an agent works in (such as your home folder) would let a sandboxed agent edit it and get code run outside the sandbox on the next hook.
 - Existing settings and hooks are left as they are; only the missing hooks are added. The original file is backed up next to it as `.bak-session-board-<timestamp>`.
-- The hook only writes session state files to `~/.claude/session-board/state/` and shows a notification when you're needed. It never changes a session, never approves anything for you, and sends nothing off your Mac.
+- The hook only writes session state files to `~/.claude/session-board/state/` (plus the last 500 received event types in `events.log`, for troubleshooting) and shows a notification when you're needed. It never changes a session, never approves anything for you, and sends nothing off your Mac.
 
 ### How approval differs
 
