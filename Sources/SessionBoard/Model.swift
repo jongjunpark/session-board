@@ -129,14 +129,23 @@ final class BoardModel: ObservableObject {
     var running: [BoardItem] { items.filter { $0.state == "running" } }
     var done: [BoardItem] { items.filter { $0.state == "done" } }
 
+    // 확인으로 지운 세션 → 지운 시각. 목록을 새로 읽는 데 2초쯤 걸려서, 지우기 전에 읽기 시작한 결과가
+    // 늦게 도착하면 지운 항목이 다시 나타난다. 지운 뒤에 시작한 읽기 결과가 올 때까지 이 목록으로 걸러 낸다
+    private var checkedAt: [String: Date] = [:]
+
     func refresh() {
         guard !demoMode, !loading else { return }
         loading = true
+        let started = Date()
         Task.detached {
-            let next = BoardModel.load()
+            let loaded = BoardModel.load()
             await MainActor.run {
                 self.loading = false
-                guard let next, next != self.items else { return }
+                guard let loaded else { return }
+                // 이 읽기가 시작되기 전에 지운 것은 이미 반영됐으니 더 거를 필요가 없다
+                self.checkedAt = self.checkedAt.filter { $0.value >= started }
+                let next = loaded.filter { self.checkedAt[$0.session_id] == nil }
+                guard next != self.items else { return }
                 self.request(items: next)
             }
         }
@@ -181,15 +190,24 @@ final class BoardModel: ObservableObject {
         return "\(boardDir)/state/\(sessionID).json"
     }
 
+    // 확인한 항목은 목록을 다시 읽을 때까지 기다리지 않고 바로 화면에서 뺀다
     func check(_ item: BoardItem) {
-        if let path = BoardModel.stateFile(item.session_id) { try? FileManager.default.removeItem(atPath: path) }
-        refresh()
+        remove([item])
     }
 
     func checkAllDone() {
-        for item in done {
+        remove(done)
+    }
+
+    private func remove(_ targets: [BoardItem]) {
+        guard !targets.isEmpty else { return }
+        let now = Date()
+        for item in targets {
             if let path = BoardModel.stateFile(item.session_id) { try? FileManager.default.removeItem(atPath: path) }
+            checkedAt[item.session_id] = now
         }
+        let ids = Set(targets.map(\.session_id))
+        request(items: (wantItems ?? items).filter { !ids.contains($0.session_id) })
         refresh()
     }
 
