@@ -9,12 +9,57 @@ final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
+    // 위에 얹은 가장자리 손잡이. SwiftUI 가 클릭을 먼저 가져가지 않게 손잡이부터 맞춰 본다
+    var edgeHandles: [NSView] = []
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        for handle in edgeHandles where !handle.isHidden {
+            if handle.frame.contains(convert(point, from: superview)) { return handle }
+        }
+        return super.hitTest(point)
+    }
+
+    // 커서도 이 화면이 한곳에서 정한다. SwiftUI 는 포인터가 들어올 때 커서를 화살표로 정하는데,
+    // 그게 손잡이보다 늦게 돌면 손잡이 커서를 덮는다 (바깥에서 들어올 때만 안 바뀌던 원인).
+    // 그래서 SwiftUI 에 넘기기 전에 포인터가 손잡이 위인지 먼저 본다
+    private var cursorOnHandle = false
+
+    private func pointerOnHandle(_ event: NSEvent) -> Bool {
+        let point = convert(event.locationInWindow, from: nil)
+        return edgeHandles.contains { !$0.isHidden && $0.frame.contains(point) }
+    }
+
+    private func updateHandleCursor(_ event: NSEvent) -> Bool {
+        if pointerOnHandle(event) {
+            NSCursor.resizeLeftRight.set()
+            cursorOnHandle = true
+            // 같은 신호 처리 중에 SwiftUI 가 다시 화살표로 바꿔도 바로 되돌린다
+            DispatchQueue.main.async { [weak self] in
+                if self?.cursorOnHandle == true { NSCursor.resizeLeftRight.set() }
+            }
+            return true
+        }
+        if cursorOnHandle {
+            cursorOnHandle = false
+            NSCursor.arrow.set()
+        }
+        return false
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        if !updateHandleCursor(event) { super.cursorUpdate(with: event) }
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        if !updateHandleCursor(event) { super.mouseMoved(with: event) }
+    }
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let hoverArea { removeTrackingArea(hoverArea) }
         let area = NSTrackingArea(
             rect: .zero,
-            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
             owner: self,
             userInfo: nil
         )
@@ -25,6 +70,7 @@ final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
     override func mouseEntered(with event: NSEvent) {
         super.mouseEntered(with: event)
         onHoverChange?(true)
+        _ = updateHandleCursor(event)
     }
 
     var onPress: (() -> Void)?
@@ -37,6 +83,7 @@ final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
     override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
         onHoverChange?(false)
+        if cursorOnHandle { cursorOnHandle = false; NSCursor.arrow.set() }
     }
 }
 
@@ -57,12 +104,6 @@ final class EdgeResizeHandle: NSView {
 
     override var mouseDownCanMoveWindow: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-
-    // 유리 판 바깥 여백은 투명이라 마우스 신호가 아래 창으로 지나간다. 눈에 안 보일 만큼 옅게 칠해 신호를 받는다
-    override func draw(_ dirtyRect: NSRect) {
-        NSColor.black.withAlphaComponent(0.01).setFill()
-        dirtyRect.fill()
-    }
 
     // 활성화되지 않는 창이라 커서 영역 대신 항상 켜진 추적 영역으로 커서를 바꾼다.
     // 아래 SwiftUI 화면이 커서를 화살표로 되돌리므로, 들어올 때 한 번이 아니라 움직일 때마다 다시 정한다
@@ -139,13 +180,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let host = FirstMouseHostingView(rootView: AnchoredBoard(model: model))
         host.sizingOptions = [] // 창 크기는 transition 이 정한다 (제약이 애니메이션과 다투지 않게)
-        // SwiftUI 화면 위에 가장자리 손잡이를 얹으려고 평범한 컨테이너에 함께 넣는다
-        // (NSHostingView 안에 직접 넣으면 클릭을 SwiftUI 가 가져간다)
-        let container = NSView()
-        host.autoresizingMask = [.width, .height]
-        container.addSubview(host)
-        panel.contentView = container
-        host.frame = container.bounds
+        // SwiftUI 화면을 창에 바로 둔다. 다른 뷰로 감싸면 유리 효과가 창 전체에 바탕·그림자를 그린다
+        panel.contentView = host
         host.onHoverChange = { [weak self] inside in self?.model.hoverChanged(inside) }
         host.onPress = { [weak self] in self?.model.holdPeek() }
         // 실제 포인터가 유리 판(창에서 여백을 뺀 곳) 위에 있는지
@@ -165,7 +201,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.host = host
         for handle in [leftHandle, rightHandle] {
             handle.onDrag = { [weak self] edge, phase, x in self?.dragWidth(edge: edge, phase: phase, mouseX: x) }
-            container.addSubview(handle)
+            host.addSubview(handle)
+            host.edgeHandles.append(handle)
         }
 
         let size = contentSize(collapsed: model.collapsed, peek: false, items: model.items)
@@ -276,8 +313,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func layoutHandles(collapsed: Bool) {
         guard let bounds = panel?.contentView?.bounds else { return }
         let margin = AnchoredBoard.margin
-        // 잡기 쉽게 유리 판 바깥 여백까지 넓게 잡는다 (바깥 12 + 안쪽 6)
-        let outside: CGFloat = 12, inside: CGFloat = 6
+        // 유리 판 바깥 여백은 투명이라 마우스 신호가 아래 창으로 지나간다 (칠하면 창 전체에 회색 바탕이 생긴다).
+        // 그래서 잡는 영역은 유리 판 안쪽으로 넓게 둔다
+        let outside: CGFloat = 0, inside: CGFloat = 10
         let height = max(0, bounds.height - margin * 2)
         let right = bounds.width - margin
         let left = right - model.expandedWidth
