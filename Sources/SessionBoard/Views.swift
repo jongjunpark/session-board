@@ -290,24 +290,23 @@ struct BoardRow: View {
                         .lineLimit(1)
                 }
             }
-            Spacer(minLength: 0)
-            if item.state == "done" {
-                Button {
-                    model.check(item)
-                } label: {
-                    Text("확인")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Palette.done)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Capsule().fill(Palette.done.opacity(0.14)))
-                        .overlay(Capsule().strokeBorder(Palette.done.opacity(0.35), lineWidth: 0.5))
-                        .contentShape(Capsule())
+            // 글자 묶음이 남는 폭을 다 쓰게 해서, 아래 흐림이 늘 줄의 오른쪽 끝에 맞도록 한다
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // 확인 버튼은 마우스를 올렸을 때만 오른쪽 위에 겹쳐 뜬다. 평소엔 자리를 차지하지 않아 글자가 끝까지 쓰고,
+            // 버튼이 뜨면 그 아래 글자를 부드럽게 흐려 겹쳐 보이지 않게 한다
+            .mask(alignment: .trailing) {
+                HStack(spacing: 0) {
+                    Rectangle()
+                    if showCheck {
+                        LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                            .frame(width: 16)
+                        Color.clear.frame(width: BoardRow.checkWidth)
+                    }
                 }
-                .buttonStyle(.plain)
-                .opacity(hovering ? 1 : 0)
-                .help("확인 완료 — 목록에서 치우기")
-                .accessibilityLabel("확인 완료")
+            }
+            if item.state == "done" && item.bg_warn {
+                // "기다리기"가 오른쪽에 늘 있는 줄은 겹쳐 띄울 자리가 없어서 그 옆에 둔다
+                checkButton.opacity(hovering ? 1 : 0)
             }
             if item.bg_warn {
                 // 늘 보이게 둔다: 멈춘 게 아니면 이걸 눌러 알림을 미룬다
@@ -329,6 +328,9 @@ struct BoardRow: View {
                 .accessibilityLabel("기다리기")
             }
         }
+        .overlay(alignment: .topTrailing) {
+            if showCheck { checkButton.transition(.opacity) }
+        }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .background(card)
@@ -347,6 +349,29 @@ struct BoardRow: View {
             Button(item.state == "done" ? "확인 완료" : "목록에서 제거") { model.check(item) }
         }
     }
+
+    // 겹쳐 띄우는 확인 버튼 ("기다리기"가 있는 줄은 옆에 따로 둔다)
+    private var showCheck: Bool { item.state == "done" && !item.bg_warn && hovering }
+
+    private var checkButton: some View {
+        Button {
+            model.check(item)
+        } label: {
+            Text("확인")
+                .font(.system(size: 11, weight: .semibold))
+                .fixedSize()
+                .foregroundStyle(Palette.done)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(Palette.done.opacity(0.14)))
+                .overlay(Capsule().strokeBorder(Palette.done.opacity(0.35), lineWidth: 0.5))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help("확인 완료 — 목록에서 치우기")
+        .accessibilityLabel("확인 완료")
+    }
+    static let checkWidth: CGFloat = 44 // 확인 버튼 자리 (글자 + 안쪽 여백)
 
     // 평소엔 유리 위에 바로 놓이고, 마우스를 올린 줄만 밝힌다. 확인 필요는 늘 호박색으로 살짝 물든다.
     private var card: some View {
