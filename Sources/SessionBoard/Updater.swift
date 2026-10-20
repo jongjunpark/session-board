@@ -10,7 +10,7 @@ final class Updater: ObservableObject {
     struct Release: Equatable {
         let version: String
         let zipURL: URL
-        let sha256: String? // GitHub 가 알려 주는 파일 지문 (없으면 확인 생략)
+        let sha256: String? // 파일 지문 (없으면 설치할 때 받아 온다)
         let pageURL: URL
     }
 
@@ -104,31 +104,56 @@ final class Updater: ObservableObject {
         }
     }
 
+    // 최신 버전은 GitHub 웹 주소 /releases/latest 가 넘겨 주는 태그 주소로 알아낸다.
+    // GitHub API 는 로그인 없이 IP 하나당 시간당 60번까지라, 여럿이 IP 를 같이 쓰는 회사 네트워크에서는
+    // 금방 막힌다 (403 → "업데이트 확인 실패"). 웹 주소는 이 한도가 없다
     private func fetchLatest() async throws -> Release {
-        var request = URLRequest(url: URL(string: "https://api.github.com/repos/\(repository)/releases/latest")!)
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        var request = URLRequest(url: URL(string: "https://github.com/\(repository)/releases/latest")!)
+        request.httpMethod = "HEAD"
         request.timeoutInterval = 15
         request.cachePolicy = .reloadIgnoringLocalCacheData // 저장해 둔 옛 응답을 다시 쓰면 새 버전을 못 본다
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
+        let (_, response) = try await URLSession.shared.data(for: request)
+        // 따라간 끝 주소: https://github.com/<repo>/releases/tag/v0.3.13
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200,
+              let final = http.url, final.pathComponents.count >= 2,
+              final.pathComponents[final.pathComponents.count - 2] == "tag" else {
+            throw NSError(domain: "SessionBoard", code: 3,
+                          userInfo: [NSLocalizedDescriptionKey: "GitHub 에서 최신 릴리스를 찾지 못했어요."])
+        }
+        let tag = final.lastPathComponent
+        let version = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
+        let download = "https://github.com/\(repository)/releases/download/\(tag)"
+        return Release(version: version,
+                       zipURL: URL(string: "\(download)/SessionBoard.zip")!,
+                       sha256: nil, // 설치할 때 받아 온다 (확인만 할 때는 필요 없다)
+                       pageURL: final)
+    }
 
-        struct Asset: Decodable {
-            let name: String
-            let browser_download_url: URL
-            let digest: String?
+    // 파일 지문: 릴리스에 함께 올리는 SessionBoard.zip.sha256 을 먼저 보고 (한도 없음),
+    // 그 파일이 없는 옛 릴리스는 GitHub API 의 지문으로 확인한다
+    private func expectedSHA256(_ release: Release) async throws -> String {
+        let shaURL = release.zipURL.appendingPathExtension("sha256")
+        if let (data, response) = try? await URLSession.shared.data(from: shaURL),
+           (response as? HTTPURLResponse)?.statusCode == 200,
+           let text = String(data: data, encoding: .utf8),
+           let sha = text.split(whereSeparator: { $0 == " " || $0 == "\n" }).first.map(String.init),
+           sha.count == 64 {
+            return sha.lowercased()
         }
-        struct Payload: Decodable {
-            let tag_name: String
-            let html_url: URL
-            let assets: [Asset]
+        var request = URLRequest(url: URL(string: "https://api.github.com/repos/\(repository)/releases/tags/v\(release.version)")!)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = 15
+        let (data, response) = try await URLSession.shared.data(for: request)
+        struct Asset: Decodable { let name: String; let digest: String? }
+        struct Payload: Decodable { let assets: [Asset] }
+        guard (response as? HTTPURLResponse)?.statusCode == 200,
+              let payload = try? JSONDecoder().decode(Payload.self, from: data),
+              let digest = payload.assets.first(where: { $0.name == "SessionBoard.zip" })?.digest,
+              digest.hasPrefix("sha256:") else {
+            throw NSError(domain: "SessionBoard", code: 4,
+                          userInfo: [NSLocalizedDescriptionKey: "받은 파일이 맞는지 확인할 지문을 가져오지 못했어요. 잠시 뒤 다시 시도해 주세요."])
         }
-        let payload = try JSONDecoder().decode(Payload.self, from: data)
-        guard let zip = payload.assets.first(where: { $0.name == "SessionBoard.zip" }) else {
-            throw URLError(.fileDoesNotExist)
-        }
-        let version = payload.tag_name.hasPrefix("v") ? String(payload.tag_name.dropFirst()) : payload.tag_name
-        let sha = zip.digest.flatMap { $0.hasPrefix("sha256:") ? String($0.dropFirst(7)) : nil }
-        return Release(version: version, zipURL: zip.browser_download_url, sha256: sha, pageURL: payload.html_url)
+        return String(digest.dropFirst(7)).lowercased()
     }
 
     // "0.10.0" > "0.9.3" 처럼 숫자 단위로 비교한다
@@ -196,12 +221,12 @@ final class Updater: ObservableObject {
         let (tempZip, response) = try await URLSession.shared.download(from: release.zipURL)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
         let data = try Data(contentsOf: tempZip)
-        if let expected = release.sha256 {
-            let actual = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-            guard actual == expected.lowercased() else {
-                throw NSError(domain: "SessionBoard", code: 1,
-                              userInfo: [NSLocalizedDescriptionKey: "받은 파일의 지문이 릴리스와 달라요. 설치하지 않았어요."])
-            }
+        let expected: String
+        if let known = release.sha256 { expected = known.lowercased() } else { expected = try await expectedSHA256(release) }
+        let actual = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        guard actual == expected else {
+            throw NSError(domain: "SessionBoard", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "받은 파일의 지문이 릴리스와 달라요. 설치하지 않았어요."])
         }
         let work = FileManager.default.temporaryDirectory.appendingPathComponent("SessionBoard-update-\(release.version)")
         try? FileManager.default.removeItem(at: work)

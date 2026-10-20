@@ -22,11 +22,13 @@ rm -f "$ZIP"
 ditto -c -k --keepParent "build/${APP_NAME}.app" "$ZIP"
 SHA256=$(shasum -a 256 "$ZIP" | awk '{print $1}')
 echo "▸ $ZIP  sha256=$SHA256"
+# 앱이 API 없이(요청 한도 없이) 지문을 확인하도록 함께 올린다
+echo "$SHA256  ${APP_NAME}.zip" >"$ZIP.sha256"
 
 git tag "$TAG"
 git push origin main "$TAG"
 # 릴리스 노트는 CHANGELOG.md 의 "## vX.Y.Z" 절에서 가져온다
-gh release create "$TAG" "$ZIP" --title "${APP_NAME} ${TAG}" --notes "$NOTES"
+gh release create "$TAG" "$ZIP" "$ZIP.sha256" --title "${APP_NAME} ${TAG}" --notes "$NOTES"
 
 echo "▸ Homebrew 탭 갱신 ($TAP_REPO)"
 TAP=$(mktemp -d)
