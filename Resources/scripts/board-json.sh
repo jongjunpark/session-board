@@ -21,12 +21,24 @@ mkdir -p "$DIR" && chmod 700 "$BOARD" "$DIR" 2>/dev/null
 chmod 600 "$BOARD"/*.json "$BOARD"/.index*.json "$BOARD"/update.log 2>/dev/null # 예전 버전이 만든 파일도
 
 # 데스크톱 앱 세션 목록 → CLI 세션 id 색인 (앱 세션 파일이 바뀌었을 때만 다시 만든다)
-if [ ! -f "$IDX" ] || [ -n "$(find "$SESS" -name 'local_*.json' -newer "$IDX" -print -quit 2>/dev/null)" ]; then
+# (색인이 깨져 있어도 다시 만든다)
+if [ ! -f "$IDX" ] || ! jq -e 'type == "object"' "$IDX" >/dev/null 2>&1 \
+  || [ -n "$(find "$SESS" -name 'local_*.json' -newer "$IDX" -print -quit 2>/dev/null)" ]; then
   find "$SESS" -name 'local_*.json' -print0 2>/dev/null \
     | xargs -0 jq -c '{id: .sessionId, title: (.title // ""), scheduled: has("scheduledTaskId"),
         archived: (.isArchived // false), current: .cliSessionId, cli: ([.cliSessionId] + (.priorCliSessionIds // []))}' 2>/dev/null \
-    | jq -s 'map(. as $s | .cli[] | {key: ., value: ($s | del(.cli))}) | from_entries' >"$IDX.tmp.$$" \
+    | jq -s 'map(. as $s | .cli[] | select(type == "string" and . != "") | {key: ., value: ($s | del(.cli))}) | from_entries' >"$IDX.tmp.$$" \
     && mv "$IDX.tmp.$$" "$IDX"
+  rm -f "$IDX.tmp.$$"
+fi
+# 예전 버전이 색인 만들기에 실패하며 남긴 임시 파일 정리 (지금 다른 실행이 쓰는 중일 수 있으니 1분 지난 것만)
+find "$BOARD" -maxdepth 1 -name '.index-*.tmp.*' -mmin +1 -delete 2>/dev/null
+# 대화를 시작하지 않은 앱 세션은 cliSessionId 가 없다 — 위에서 거른다 (#1).
+# 그래도 색인을 못 만들었으면 빈 색인으로 계속한다. 색인이 없다고 목록 전체가 비면 안 된다
+IDXFILE="$IDX"
+if ! jq -e 'type == "object"' "$IDX" >/dev/null 2>&1; then
+  IDXFILE=$(mktemp "$BOARD/.index-empty.XXXXXX"); echo '{}' >"$IDXFILE"
+  trap 'rm -f "$IDXFILE"' EXIT
 fi
 
 # 상태 파일 + 마지막 움직임 시각 (상태 파일과 대화 기록 중 늦은 쪽)
@@ -192,7 +204,7 @@ FILTER_COMMON='
 #  - 보관·예약 루틴 앱 세션은 바로
 #  - 보관한 Codex 스레드, codex exec 실행은 바로
 #  - 터미널·Codex 세션이 완료 아닌 채로 하루 넘게 소식이 없으면 (창을 닫았거나 멈춘 것)
-jq -r --slurpfile idx "$IDX" --argjson cidx "$CIDX" --argjson now "$(date +%s)" "$FILTER_COMMON"'
+jq -r --slurpfile idx "$IDXFILE" --argjson cidx "$CIDX" --argjson now "$(date +%s)" "$FILTER_COMMON"'
   .[] | . as $s | ($s | source($idx[0]; $cidx)) as $src
   | select(
       ($src == null and ($now - $s.updated_at) > 86400)
@@ -202,7 +214,7 @@ jq -r --slurpfile idx "$IDX" --argjson cidx "$CIDX" --argjson now "$(date +%s)" 
       or (($src.kind == "terminal" or $src.kind == "codex") and $s.state != "done" and ($now - $s.mtime) > 86400))
   | .path' <<<"$states" | while IFS= read -r p; do rm -f "$p"; done
 
-jq -c --slurpfile idx "$IDX" --argjson cidx "$CIDX" --argjson now "$(date +%s)" --argjson stale "$STALE_SEC" --argjson bgwarn "$BG_WARN_SEC" --argjson bgon "$BG_WARN_ON" "$FILTER_COMMON"'
+jq -c --slurpfile idx "$IDXFILE" --argjson cidx "$CIDX" --argjson now "$(date +%s)" --argjson stale "$STALE_SEC" --argjson bgwarn "$BG_WARN_SEC" --argjson bgon "$BG_WARN_ON" "$FILTER_COMMON"'
   # 큰 단위 하나만: 방금 · N분 · N시간 · N일
   def dur: if . < 60 then "방금" elif . < 3600 then "\(. / 60 | floor)분"
            elif . < 86400 then "\(. / 3600 | floor)시간" else "\(. / 86400 | floor)일" end;
