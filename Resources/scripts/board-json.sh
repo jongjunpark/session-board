@@ -33,6 +33,8 @@ if [ ! -f "$IDX" ] || ! jq -e 'type == "object"' "$IDX" >/dev/null 2>&1 \
 fi
 # 예전 버전이 색인 만들기에 실패하며 남긴 임시 파일 정리 (지금 다른 실행이 쓰는 중일 수 있으니 1분 지난 것만)
 find "$BOARD" -maxdepth 1 -name '.index-*.tmp.*' -mmin +1 -delete 2>/dev/null
+# 끝 신호가 오지 않아 남은 "다음 단계 상자" 질문 기록 정리
+find "$DIR" -maxdepth 1 -name '*.ask' -mmin +1440 -delete 2>/dev/null
 # 대화를 시작하지 않은 앱 세션은 cliSessionId 가 없다 — 위에서 거른다 (#1).
 # 그래도 색인을 못 만들었으면 빈 색인으로 계속한다. 색인이 없다고 목록 전체가 비면 안 된다
 IDXFILE="$IDX"

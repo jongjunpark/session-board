@@ -22,6 +22,7 @@ sid=$(jq -r '.session_id // empty' <<<"$input")
 event=$(jq -r '.hook_event_name // empty' <<<"$input")
 tool=$(jq -r '.tool_name // empty' <<<"$input")
 file="$DIR/$sid.json"
+ASK="$DIR/$sid.ask" # 다음 단계 상자에 띄운 질문 (끝 신호 때 확인 필요로 올리려고 잠깐 둔다)
 cur=""
 [ -f "$file" ] && cur=$(jq -r '.state // empty' "$file" 2>/dev/null)
 
@@ -144,6 +145,7 @@ notify_needs_input() {
 
 case "$event" in
   UserPromptSubmit)
+    rm -f "$ASK"
     write running "" ""
     ;;
   PreToolUse)
@@ -202,6 +204,12 @@ case "$event" in
       write running "" ""
     fi
     [ "$event" = "PostToolUse" ] && [ "$AGENT" = claude ] && add_bg # 백그라운드 작업 추적은 Claude 만
+    # Claude 데스크톱 앱의 "다음 단계 상자": 요약·질문·빠른 답 버튼을 띄우고 턴을 끝낸다.
+    # 질문(ask)이 있으면 기억해 두었다가 끝 신호(Stop) 때 확인 필요로 올린다
+    if [ "$event" = "PostToolUse" ] && [[ "$tool" == *__wrap_up ]]; then
+      ask=$(jq -r '.tool_input.ask // "" | gsub("[\t\n]"; " ") | .[0:80]' <<<"$input")
+      if [ -n "$ask" ]; then printf '%s' "$ask" >"$ASK"; else rm -f "$ASK"; fi
+    fi
     [ "$AGENT" = codex ] && codex_cmd_end # Codex: 끝난 명령은 실행 중 목록에서 뺀다
     # 백그라운드 작업을 직접 멈춘 경우엔 완료 알림이 오지 않으므로 여기서 뺀다
     case "$tool" in
@@ -219,12 +227,21 @@ case "$event" in
     summary=$(jq -r '(.last_assistant_message // "")
       | split("\n") | map(select(test("^\\s*#") | not)) | map(gsub("\\[(?<t>[^\\]]*)\\]\\([^)]*\\)"; "\(.t)") | gsub("https?://\\S+"; "") | gsub("[*`>|]"; "") | sub("^[\\s#-]+"; "") | select(test("\\S")))
       | (.[0] // "") | .[0:80]' <<<"$input")
-    write done "" "${summary:-}"
+    # Claude 데스크톱 앱의 "다음 단계 상자"(wrap_up)에 질문을 띄우고 끝났으면 답을 기다리는 것으로 본다
+    if [ -s "$ASK" ]; then
+      ask=$(cat "$ASK"); rm -f "$ASK"
+      notify_needs_input "$ask"
+      write needs_input "$ask" "${summary:-}"
+    else
+      write done "" "${summary:-}"
+    fi
     ;;
   StopFailure)
+    rm -f "$ASK"
     write done "오류로 멈춤" ""
     ;;
   Interrupt) # Codex: 도중에 멈춤 (도는 명령도 함께 멈추므로 실행 중 목록을 비운다)
+    rm -f "$ASK"
     write done "중단됨" ""
     tmp=$(mktemp "$DIR/.tmp.XXXXXX")
     jq '.bg = []' "$file" >"$tmp" && mv "$tmp" "$file"
