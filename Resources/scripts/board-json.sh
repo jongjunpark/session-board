@@ -24,8 +24,10 @@ chmod 600 "$BOARD"/*.json "$BOARD"/.index*.json "$BOARD"/update.log 2>/dev/null 
 # (색인이 깨져 있어도 다시 만든다)
 if [ ! -f "$IDX" ] || ! jq -e 'type == "object"' "$IDX" >/dev/null 2>&1 \
   || [ -n "$(find "$SESS" -name 'local_*.json' -newer "$IDX" -print -quit 2>/dev/null)" ]; then
+  # 파일마다 따로 읽는다 (-n 1). jq 는 여러 파일을 한 번에 읽다 하나가 깨져 있으면 그 뒤 파일을 버리는데,
+  # 앱이 세션 파일을 고쳐 쓰는 순간 반쯤 쓰인 파일이 끼면 뒤 세션들이 색인에서 빠져 목록이 통째로 비었다
   find "$SESS" -name 'local_*.json' -print0 2>/dev/null \
-    | xargs -0 jq -c '{id: .sessionId, title: (.title // ""), scheduled: has("scheduledTaskId"),
+    | xargs -0 -n 1 -P 8 jq -c '{id: .sessionId, title: (.title // ""), scheduled: has("scheduledTaskId"),
         archived: (.isArchived // false), current: .cliSessionId, cli: ([.cliSessionId] + (.priorCliSessionIds // []))}' 2>/dev/null \
     | jq -s 'map(. as $s | .cli[] | select(type == "string" and . != "") | {key: ., value: ($s | del(.cli))}) | from_entries' >"$IDX.tmp.$$" \
     && mv "$IDX.tmp.$$" "$IDX"
