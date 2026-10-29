@@ -88,6 +88,28 @@ for f in "$DIR"/*.json; do
       fi
     fi
 
+    # Claude: 앱 안 브라우저가 사이트 허용(이동·페이지 읽기)을 물을 때는 훅 신호가 없다.
+    # 이동·읽기 같은 브라우저 도구는 보통 몇 초 안에 끝나므로, 결과 없이 30초 넘게 걸린 호출이 있으면 허용을 기다리는 것으로 본다
+    # (허용하거나 거부하면 도구가 끝나며 오는 훅 신호로 진행중으로 돌아간다).
+    # 원래 오래 걸릴 수 있는 도구는 뺀다 — 지난 기록에서 묶음 실행(browser_batch) 최장 219초, 스크립트(javascript_tool) 49초,
+    # 개발 서버 띄우기(preview_*) 303초가 허용 창 없이도 나왔다
+    if [ "$(jq -r '.agent // "claude"' "$f")" = claude ] && [ "$(jq -r '.state' "$f")" = running ]; then
+      waiting=$(tail -n 80 "$tr" | jq -rs --argjson now "$(date +%s)" '
+        [ .[] | select(.type? == "assistant" or .type? == "user") ] as $e
+        | ([ $e[] | .message.content[]? | select(type == "object" and .type == "tool_result") | .tool_use_id ]) as $done
+        | [ $e[] | . as $m | .message.content[]? | select(type == "object" and .type == "tool_use")
+            | select(.name | startswith("mcp__Claude_Browser__"))
+            | select(.name | test("__(browser_batch|javascript_tool|preview_[a-z_]+)$") | not)
+            | select(.id as $i | $done | index($i) | not)
+            | ($m.timestamp | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) ]
+        | if length > 0 and ($now - min) > 30 then "브라우저 사이트 허용을 기다려요" else "" end' 2>/dev/null)
+      if [ -n "$waiting" ]; then
+        tmp=$(mktemp "$DIR/.tmp.XXXXXX")
+        jq --arg r "$waiting" '.state = "needs_input" | .reason = $r' "$f" >"$tmp" && mv "$tmp" "$f"
+        "$HERE/notify.sh" "$(jq -r .session_id "$f")" "$waiting" claude >/dev/null 2>&1 &
+      fi
+    fi
+
     # Claude: ESC 로 멈추면 Stop 훅이 오지 않는다. 대화 기록의 마지막 말이 중단 표시
     # ("[Request interrupted by user]" / "… for tool use]")면 중단됨으로 끝낸다 (다시 말을 걸면 훅이 진행중으로 되돌린다)
     if [ "$(jq -r '.agent // "claude"' "$f")" = claude ] && [ "$(jq -r '.state' "$f")" != done ]; then
