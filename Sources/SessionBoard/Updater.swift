@@ -104,29 +104,52 @@ final class Updater: ObservableObject {
         }
     }
 
-    // 최신 버전은 GitHub 웹 주소 /releases/latest 가 넘겨 주는 태그 주소로 알아낸다.
+    // 최신 버전은 GitHub 웹의 릴리스 피드(releases.atom)에서 가장 높은 버전 태그로 알아낸다.
     // GitHub API 는 로그인 없이 IP 하나당 시간당 60번까지라, 여럿이 IP 를 같이 쓰는 회사 네트워크에서는
-    // 금방 막힌다 (403 → "업데이트 확인 실패"). 웹 주소는 이 한도가 없다
+    // 금방 막힌다 (403 → "업데이트 확인 실패"). 웹 주소는 이 한도가 없다.
+    // /releases/latest 로 넘겨받는 주소는 새 릴리스 뒤 한동안 옛 버전을 가리켜서 (GitHub 쪽 캐시) 피드를 먼저 본다
     private func fetchLatest() async throws -> Release {
+        let tag: String
+        if let fromFeed = await latestTagFromFeed() { tag = fromFeed } else { tag = try await latestTagFromRedirect() }
+        let version = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
+        let base = "https://github.com/\(repository)/releases"
+        return Release(version: version,
+                       zipURL: URL(string: "\(base)/download/\(tag)/SessionBoard.zip")!,
+                       sha256: nil, // 설치할 때 받아 온다 (확인만 할 때는 필요 없다)
+                       pageURL: URL(string: "\(base)/tag/\(tag)")!)
+    }
+
+    // 피드에 실린 릴리스 태그 중 가장 높은 버전 (피드를 못 읽으면 nil → 넘겨받는 주소로 대신 확인)
+    private func latestTagFromFeed() async -> String? {
+        var request = URLRequest(url: URL(string: "https://github.com/\(repository)/releases.atom")!)
+        request.timeoutInterval = 15
+        request.cachePolicy = .reloadIgnoringLocalCacheData // 저장해 둔 옛 응답을 다시 쓰면 새 버전을 못 본다
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let feed = String(data: data, encoding: .utf8),
+              let pattern = try? NSRegularExpression(pattern: "/releases/tag/(v?[0-9]+(?:\\.[0-9]+)*)\"") else { return nil }
+        let tags = pattern.matches(in: feed, range: NSRange(feed.startIndex..., in: feed)).compactMap { match in
+            Range(match.range(at: 1), in: feed).map { String(feed[$0]) }
+        }
+        return tags.max { a, b in
+            Self.isNewer(b.hasPrefix("v") ? String(b.dropFirst()) : b, than: a.hasPrefix("v") ? String(a.dropFirst()) : a)
+        }
+    }
+
+    // /releases/latest 가 넘겨 주는 태그 주소 (https://github.com/<repo>/releases/tag/v0.3.17)
+    private func latestTagFromRedirect() async throws -> String {
         var request = URLRequest(url: URL(string: "https://github.com/\(repository)/releases/latest")!)
         request.httpMethod = "HEAD"
         request.timeoutInterval = 15
-        request.cachePolicy = .reloadIgnoringLocalCacheData // 저장해 둔 옛 응답을 다시 쓰면 새 버전을 못 본다
+        request.cachePolicy = .reloadIgnoringLocalCacheData
         let (_, response) = try await URLSession.shared.data(for: request)
-        // 따라간 끝 주소: https://github.com/<repo>/releases/tag/v0.3.13
         guard let http = response as? HTTPURLResponse, http.statusCode == 200,
               let final = http.url, final.pathComponents.count >= 2,
               final.pathComponents[final.pathComponents.count - 2] == "tag" else {
             throw NSError(domain: "SessionBoard", code: 3,
                           userInfo: [NSLocalizedDescriptionKey: "GitHub 에서 최신 릴리스를 찾지 못했어요."])
         }
-        let tag = final.lastPathComponent
-        let version = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
-        let download = "https://github.com/\(repository)/releases/download/\(tag)"
-        return Release(version: version,
-                       zipURL: URL(string: "\(download)/SessionBoard.zip")!,
-                       sha256: nil, // 설치할 때 받아 온다 (확인만 할 때는 필요 없다)
-                       pageURL: final)
+        return final.lastPathComponent
     }
 
     // 파일 지문: 릴리스에 함께 올리는 SessionBoard.zip.sha256 을 먼저 보고 (한도 없음),
